@@ -92,6 +92,8 @@ public class Main {
                 System.out.println("Please set the minimum support: ");
                 minSup = sc.nextLong();
                 outFilePath = inFilePath + "_result";
+                
+                maxNodeNum = 5;
             }
         }
     }

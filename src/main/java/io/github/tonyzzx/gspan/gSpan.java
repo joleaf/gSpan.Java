@@ -62,7 +62,7 @@ public class gSpan {
         this.minSup = minSup;
         maxPat_min = minNodeNum;
         maxPat_max = maxNodeNum;
-        directed = false;
+        directed = true;
 
         read(reader);
         runIntern();
@@ -158,7 +158,7 @@ public class gSpan {
         for (Entry<Integer, NavigableMap<Integer, NavigableMap<Integer, Projected>>> fromLabel : root.entrySet()) {
             for (Entry<Integer, NavigableMap<Integer, Projected>> eLabel : fromLabel.getValue().entrySet()) {
                 for (Entry<Integer, Projected> toLabel : eLabel.getValue().entrySet()) {
-                    // Build the initial two-node graph. It will be grown recursively within project.
+                    // Build the initial two-node graph. It will be grown recursively within `project`.
                     DFS_CODE.push(0, 1, fromLabel.getKey(), eLabel.getKey(), toLabel.getKey());
                     project(toLabel.getValue());
                     DFS_CODE.pop();
@@ -258,8 +258,10 @@ public class gSpan {
 
             // backward
             for (int i = rmPath.size() - 1; i >= 1; --i) {
-                Edge e = Misc.getBackward(TRANS.get(id), history.get(rmPath.get(i)), history.get(rmPath.get(0)),
-                        history);
+            	// HJ notes: rmPath.get(0) must be the right-most vertex
+            	// see paper; only the right-most vertex can be extended with backwards edge.
+                Edge e = Misc.getBackward(TRANS.get(id), 
+                		history.get(rmPath.get(i)), history.get(rmPath.get(0)), history);
                 if (e != null) {
                     int key_1 = DFS_CODE.get(rmPath.get(i)).from;
                     NavigableMap<Integer, Projected> root_1 = new_bck_root.computeIfAbsent(key_1, k -> new TreeMap<>());
@@ -357,6 +359,8 @@ public class gSpan {
         NavigableMap<Integer, NavigableMap<Integer, NavigableMap<Integer, Projected>>> root = new TreeMap<>();
         ArrayList<Edge> edges = new ArrayList<>();
 
+        // HJ: I think this constructs all possible graphs from the vertices in the current dfs code.
+        // i.e. all possible `Projected`s goes into root_3
         for (int from = 0; from < GRAPH_IS_MIN.size(); ++from)
             if (Misc.getForwardRoot(GRAPH_IS_MIN, GRAPH_IS_MIN.get(from), edges))
                 for (Edge it : edges) {
@@ -383,9 +387,11 @@ public class gSpan {
     }
 
     private boolean isMinProject(Projected projected) {
+    	// the idea here is to compare is DFS_CODE compares to DFS_CODE_IS_MIN, which is the canonical path
+    	// that we recursely construct 
         ArrayList<Integer> rmPath = DFS_CODE_IS_MIN.buildRMPath();
         int minLabel = DFS_CODE_IS_MIN.get(0).fromLabel;
-        int maxToc = DFS_CODE_IS_MIN.get(rmPath.get(0)).to;
+        int maxToc = DFS_CODE_IS_MIN.get(rmPath.get(0)).to; // right-most vertex
 
         {
             NavigableMap<Integer, Projected> root = new TreeMap<>();
@@ -394,7 +400,7 @@ public class gSpan {
 
             for (int i = rmPath.size() - 1; !flg && i >= 1; --i) {
                 for (PDFS cur : projected) {
-                    History history = new History(GRAPH_IS_MIN, cur);
+                    History history = new History(GRAPH_IS_MIN, cur); // history allows us to easily determine if a vertex or edge is already part of the projected graph
                     Edge e = Misc.getBackward(GRAPH_IS_MIN, history.get(rmPath.get(i)), history.get(rmPath.get(0)),
                             history);
                     if (e != null) {

@@ -9,6 +9,7 @@ public class Graph extends ArrayList<Vertex> {
     private static final long serialVersionUID = 1L;
     int edge_size = 0;
     boolean directed = false;
+    int quantity = 0; // In this formulation of the problem, each graph represents many clones.
 
     public Graph() {
     }
@@ -56,9 +57,19 @@ public class Graph extends ArrayList<Vertex> {
 
             if (!result.isEmpty()) {
                 if (result.get(0).equals("t")) {
-                    if (!this.isEmpty()) { // use as delimiter
+                    if (!this.isEmpty()) {
                         break;
                     }
+                    char label = result.get(3).charAt(0);
+                    // 'U' for unlabeled
+                    // 'M' for misuse
+                    // 'C' for correct
+                    assert label == 'U' || label == 'M' || label == 'C';
+                    
+                    int howMany = Integer.parseInt(result.get(4));
+                    this.quantity = howMany;
+                    assert this.quantity >= 1;
+                    
                 } else if (result.get(0).equals("v") && result.size() >= 3) {
                     // int id = Integer.parseInt(result.get(1));
                     Vertex vex = new Vertex();

@@ -19,6 +19,7 @@ public class Misc {
         return !result.isEmpty();
     }
 
+    // HJ: returns a edge not contained in history, but links e2 to e1
     public static Edge getBackward(Graph graph, Edge e1, Edge e2, History history) {
         if (e1 == e2)
             return null;
