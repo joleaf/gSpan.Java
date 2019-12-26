@@ -9,7 +9,9 @@ public class Graph extends ArrayList<Vertex> {
     private static final long serialVersionUID = 1L;
     int edge_size = 0;
     boolean directed = false;
-    int quantity = 0; // In this formulation of the problem, each graph represents many clones.
+    
+    public char label;
+    public int quantity = 0; // In this formulation of the problem, each graph represents many clones.
 
     public Graph() {
     }
@@ -65,6 +67,7 @@ public class Graph extends ArrayList<Vertex> {
                     // 'M' for misuse
                     // 'C' for correct
                     assert label == 'U' || label == 'M' || label == 'C';
+                    this.label = label;
                     
                     int howMany = Integer.parseInt(result.get(4));
                     this.quantity = howMany;
