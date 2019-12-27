@@ -48,10 +48,12 @@ public class gSpan {
 	int totalMisuses = 0;
 	int totalCorrectUses = 0;
 	int totalUnlabeled = 0;
-	
+
 	// HJ: weights of the components
-	// just a thought: we are likely to benefit from scaling the weight of each (A/B/U)_(S0/S1) directly. 
-	// Do this based on the disproportionality of each count. For example, if we have few minority class B
+	// just a thought: we are likely to benefit from scaling the weight of each
+	// (A/B/U)_(S0/S1) directly.
+	// Do this based on the disproportionality of each count. For example, if we
+	// have few minority class B
 	double AWeight, BWeight, UWeight;
 
 	int numberOfFeatures = 20;
@@ -60,20 +62,21 @@ public class gSpan {
 
 	// currently selected set of subgraph features
 	// There is no efficient way to enumerate them all
-	Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
+	public Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
 
 	public Set<Integer> misuses = new HashSet<>();
 	public Set<Integer> correctUses = new HashSet<>();
 
-	private double theta = Double.MAX_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches lower than
-								// this value are pruned.
+	private double theta = Double.MAX_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches
+												// lower than
+	// this value are pruned.
 
 	enum GRAPH_LABEL {
 		MISUSE, CORRECT_USE, UNLABELED
 	}
 
 	public Map<Long, Set<Integer>> coverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
-	
+
 	public gSpan() {
 		TRANS = new ArrayList<>();
 		DFS_CODE = new DFSCode();
@@ -104,9 +107,8 @@ public class gSpan {
 		directed = true;
 
 		read(reader);
-		
-		
-		// ste weights. 
+
+		// ste weights.
 		// Expected: weight * amount = 100
 		if (totalCorrectUses > totalMisuses) {
 			// majority class is "C"
@@ -114,21 +116,19 @@ public class gSpan {
 			BWeight = 100.0 / totalMisuses;
 		} else {
 			// majority class is "M"
-			AWeight = 100.0 / totalMisuses ;
+			AWeight = 100.0 / totalMisuses;
 			BWeight = 100.0 / totalCorrectUses;
 		}
-		
-		UWeight = 75.0 / totalUnlabeled;
-		
+
+		UWeight = 50.0 / totalUnlabeled;
+
 		System.out.println("totalCorrectUses=" + totalCorrectUses);
 		System.out.println("totalMisuses=" + totalMisuses);
 		System.out.println("totalUnlabeled=" + totalUnlabeled);
 		System.out.println("weight are : AWeight=" + AWeight + ", BWeight=" + BWeight + ", UWeight=" + UWeight);
-		System.out.println(UWeight);
-		
-		
+
 		runIntern();
-		
+
 	}
 
 	private void read(FileReader is) throws IOException {
@@ -155,7 +155,7 @@ public class gSpan {
 			} else {
 				throw new RuntimeException("huh? label seems to be " + g.label + ", at id=" + id);
 			}
-			
+
 			id++;
 		}
 		read.close();
@@ -274,18 +274,19 @@ public class gSpan {
 		ID++;
 	}
 
-	private void report(int sup) throws IOException {
+	private boolean report(int sup) throws IOException {
 		// Filter to small/too large graphs.
 		if (maxPat_max > maxPat_min && DFS_CODE.countNode() > maxPat_max)
-			return;
+			return false;
 		if (maxPat_min > 0 && DFS_CODE.countNode() < maxPat_min)
-			return;
+			return false;
 
 		Graph g = new Graph(directed);
 		DFS_CODE.toGraph(g);
 		os.write("t # " + ID + " * " + sup + System.getProperty("line.separator"));
 		g.write(os);
-		++ID;
+
+		return true;
 	}
 
 	/**
@@ -299,49 +300,60 @@ public class gSpan {
 		// Check if the pattern is frequent enough.
 		resetCountsOfLabels();
 		int sup = support(projected);
-		if (sup < minSup)
+		if (sup < minSup) {
+			coverage.remove(ID);
 			return;
-
-		
+		}
 
 		/*
 		 * The minimal DFS code check is more expensive than the support check, hence it
 		 * is done now, after checking the support.
 		 */
 		if (!isMin()) {
+			coverage.remove(ID);
 			return;
 		}
 
 		// Output the frequent substructure
-		report(sup);
-		
-		int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
-		if (totalCorrectUses > totalMisuses) {
-			LoggingUtils.logOnce("Majority class is correct usage");
-			// correct uses are the majority case, so A is the "Correct use" (C) label
-			A_S0 = totalCorrectUses - countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
-			A_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
-			B_S0 = totalMisuses - countsOfLabels.get(GRAPH_LABEL.MISUSE);
-			B_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
-			U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-			U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-		} else {
-			LoggingUtils.logOnce("Majority class is misuse");
-			// misuses are the majority case, so A is the "Misuse" (M) label
-			A_S0 = totalMisuses - countsOfLabels.get(GRAPH_LABEL.MISUSE);
-			A_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
-			B_S0 = totalCorrectUses - countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
-			B_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
-			U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-			U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-		}
-		double q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
-		
+		boolean isReported = report(sup);
 
-		double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
-		if (upperBound <= theta && selectedSubgraphFeatures.size() >= numberOfFeatures) {
-			return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
-					// prune the branch
+		if (isReported) {
+
+			// if it's a valid frequent subgraph, then check if its a valid significant subgraph
+			
+			int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
+			if (totalCorrectUses > totalMisuses) {
+				LoggingUtils.logOnce("Majority class is correct usage");
+				// correct uses are the majority case, so A is the "Correct use" (C) label
+				A_S0 = totalCorrectUses - countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
+				A_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
+				B_S0 = totalMisuses - countsOfLabels.get(GRAPH_LABEL.MISUSE);
+				B_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
+				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
+				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
+			} else {
+				LoggingUtils.logOnce("Majority class is misuse");
+				// misuses are the majority case, so A is the "Misuse" (M) label
+				A_S0 = totalMisuses - countsOfLabels.get(GRAPH_LABEL.MISUSE);
+				A_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
+				B_S0 = totalCorrectUses - countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
+				B_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
+				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
+				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
+			}
+			double q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
+
+			++ID;
+
+			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
+					UWeight);
+			if (upperBound <= theta && selectedSubgraphFeatures.size() >= numberOfFeatures) {
+//				coverage.remove(ID - 1);
+				return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
+						// prune the branch
+			}
+		} else {
+			coverage.remove(ID); // ID didn't get reported, it may be reused for another subgraph 
 		}
 
 		/*
@@ -349,8 +361,10 @@ public class gSpan {
 		 * Note: we do not check for equality as the DFS exploration may still add edges
 		 * within an existing sub-graph, without increasing the number of nodes.
 		 */
-		if (maxPat_max > maxPat_min && DFS_CODE.countNode() > maxPat_max)
+		if (maxPat_max > maxPat_min && DFS_CODE.countNode() > maxPat_max) {
+			coverage.remove(ID); // ID didn't get reported, it may be reused for another subgraph
 			return;
+		}
 
 		/*
 		 * We just outputted a frequent sub-graph. As it is frequent enough, so might be
@@ -455,15 +469,15 @@ public class gSpan {
 
 	private double computeQuality(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
 		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
-		
+
 		int originalSize = selectedSubgraphFeatures.size();
 		if (q_s > theta || selectedSubgraphFeatures.size() < numberOfFeatures) {
-			
+
 			// if adding the new feature will cause this to be bigger
 			if (selectedSubgraphFeatures.size() == numberOfFeatures) {
 				// drop weakest feature
-				long toDrop = -100; 
-				double toDropValue = Integer.MAX_VALUE; 
+				long toDrop = -100;
+				double toDropValue = Integer.MAX_VALUE;
 				for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
 					if (subgraphEntry.getValue() < toDropValue) {
 						toDrop = subgraphEntry.getKey();
@@ -475,31 +489,51 @@ public class gSpan {
 					throw new RuntimeException("can't find toDrop=" + toDrop + " and currently theta=" + theta);
 				}
 				selectedSubgraphFeatures.remove(toDrop);
-				// also clean up the coverage. Don't need this subgraph anymore 
+				// also clean up the coverage. Don't need information about this subgraph
+				// anymore
+				if (!coverage.containsKey(toDrop)) {
+					throw new RuntimeException("missing toDrop in coverage=" + toDrop);
+				}
 				coverage.remove(toDrop);
-				
+			
 				if (!(selectedSubgraphFeatures.size() == numberOfFeatures - 1)) {
 					throw new RuntimeException("Unexpected size");
 				}
 			}
-			
+
+			// set new value of theta, which is the minimal quality value among the selected (so far) subgraphs
 			theta = Double.MAX_VALUE;
 			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
 				theta = Math.min(theta, subgraphEntry.getValue());
 			}
-			
+
 			if (selectedSubgraphFeatures.containsKey(ID)) {
 				throw new RuntimeException("iterating into the same subgraph ID again! " + ID);
 			}
-			
+
 			selectedSubgraphFeatures.put(ID, q_s);
+
+			if (selectedSubgraphFeatures.size() != coverage.size()) {
+				System.out.println("Just inserted " + ID);
+				System.out.println("selectedSubgraphFeatures.size()= " + selectedSubgraphFeatures.size());
+				System.out.println("coverage.size()= " + coverage.size());
+				
+				Set<Long> missing = selectedSubgraphFeatures.keySet();
+				missing.removeAll(coverage.keySet());
+				System.out.println("missing= " + missing);
+
+				throw new RuntimeException("Unexpected coverage vs selectedSubgraphFeatures size");
+			}
+
 			
 			System.out.println("\tdebug!: ID=" + ID + " , q_s=" + q_s);
-			System.out.println("\t.. A_S0="+A_S0 + " , A_S1=" +A_S1);
-			System.out.println("\t.. " + "B_S0=" + B_S0 + " , B_S1="+B_S1 + " , U_S0=" +U_S0 + " , U_S1=" +U_S1);
+			System.out.print("\t.. A_S0=" + A_S0 + " , A_S1=" + A_S1);
+			System.out.println("\t.. " + "B_S0=" + B_S0 + " , B_S1=" + B_S1 + " ,..  U_S0=" + U_S0 + " , U_S1=" + U_S1);
+		} else {
+			// not interesting enoguh. No need to keep coverage info
+			coverage.remove(ID);
 		}
-		
-		
+
 		if (originalSize > selectedSubgraphFeatures.size()) {
 			throw new RuntimeException("the subgraph vector shrank!");
 		}
@@ -512,10 +546,11 @@ public class gSpan {
 		countsOfLabels.put(GRAPH_LABEL.UNLABELED, 0);
 	}
 
-	// HJ: "support" isn't exaclty the number of graphs anymore, but now its the number of projects
+	// HJ: "support" isn't exaclty the number of graphs anymore, but now its the
+	// number of projects
 	private int support(Projected projected) {
 		int oid = 0xffffffff;
-		int size = 0;		
+		int size = 0;
 
 		for (PDFS cur : projected) {
 			if (oid != cur.id) {
@@ -524,20 +559,36 @@ public class gSpan {
 
 				// now update the `counts` map
 				boolean isMisuse = misuses.contains(cur.id);
-				boolean isCorrectUse = misuses.contains(cur.id);
+				boolean isCorrectUse = correctUses.contains(cur.id);
 
-				assert !(isMisuse && isCorrectUse); // can't both be true at the same time
+				if (isMisuse && isCorrectUse) {
+					throw new RuntimeException("invalid label!");
+				}
+				coverage.putIfAbsent(ID, new HashSet<>());
 
 				if (isMisuse) {
-					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + 1); //TRANS.get(cur.id).quantity);
-					coverage.putIfAbsent(ID, new HashSet<>());
+					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + 1); // TRANS.get(cur.id).quantity);
+					
+					if (countsOfLabels.get(GRAPH_LABEL.MISUSE) > totalMisuses) {
+						throw new RuntimeException("invalid MISUSE counts");
+					}
+						
+//					System.out.println("putting into coverage=" + ID);
 					coverage.get(ID).add(cur.id);
 				} else if (isCorrectUse) {
-					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + 1); //TRANS.get(cur.id).quantity);
-					coverage.putIfAbsent(ID, new HashSet<>());
+					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + 1); // TRANS.get(cur.id).quantity);
+//					System.out.println("putting into coverage=" + ID);
+					if (countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) > totalCorrectUses) {
+						throw new RuntimeException("invalid CORRECT_USE counts");
+					}
+					
 					coverage.get(ID).add(cur.id);
 				} else { // unlabeled
 					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) + 1);// TRANS.get(cur.id).quantity);
+					
+					if (countsOfLabels.get(GRAPH_LABEL.UNLABELED) > totalUnlabeled) {
+						throw new RuntimeException("invalid UNLABELED counts");
+					}
 				}
 
 			}

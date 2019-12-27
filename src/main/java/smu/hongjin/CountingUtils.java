@@ -5,12 +5,10 @@ import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import io.github.tonyzzx.gspan.gSpan;
@@ -202,6 +200,11 @@ public class CountingUtils {
 
 	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, BufferedWriter writer) throws IOException {
 		System.out.println("\tConsolidating and writing graph and their subgraph features");
+		
+		if (coverage.size() != gSpan.selectedSubgraphFeatures.size()) {
+			throw new RuntimeException("wrong size!");
+		}
+		
 		List<Integer> graphs = new ArrayList<>();
 		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
 			graphs.addAll(entry.getValue());
