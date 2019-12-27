@@ -26,7 +26,7 @@ public class Main {
                 System.out.println("It's done! The result is in the " + arguments.outFilePath + " .");
                 
                 try (BufferedWriter selectedSubGraphWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_best_subgraphs.txt"))) {
-        			for (Map.Entry<Long, Integer> subgraphFeature : gSpan.selectedSubgraphFeatures.entrySet()) {
+        			for (Map.Entry<Long, Double> subgraphFeature : gSpan.selectedSubgraphFeatures.entrySet()) {
         				selectedSubGraphWriter.write(subgraphFeature.getKey() + "," + subgraphFeature.getValue());
         				selectedSubGraphWriter.write("\n");
         			}

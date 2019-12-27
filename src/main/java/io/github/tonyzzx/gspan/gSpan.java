@@ -20,6 +20,7 @@ import io.github.tonyzzx.gspan.model.PDFS;
 import io.github.tonyzzx.gspan.model.Projected;
 import io.github.tonyzzx.gspan.model.Vertex;
 import smu.hongjin.CountingUtils;
+import smu.hongjin.LoggingUtils;
 
 import java.util.NavigableMap;
 import java.util.Set;
@@ -47,6 +48,11 @@ public class gSpan {
 	int totalMisuses = 0;
 	int totalCorrectUses = 0;
 	int totalUnlabeled = 0;
+	
+	// HJ: weights of the components
+	// just a thought: we are likely to benefit from scaling the weight of each (A/B/U)_(S0/S1) directly. 
+	// Do this based on the disproportionality of each count. For example, if we have few minority class B
+	double AWeight, BWeight, UWeight;
 
 	int numberOfFeatures = 20;
 
@@ -54,12 +60,12 @@ public class gSpan {
 
 	// currently selected set of subgraph features
 	// There is no efficient way to enumerate them all
-	Map<Long, Integer> selectedSubgraphFeatures = new HashMap<>();
+	Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
 
 	Set<Integer> misuses = new HashSet<>();
 	Set<Integer> correctUses = new HashSet<>();
 
-	private int theta = Integer.MIN_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches lower than
+	private double theta = Double.MAX_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches lower than
 								// this value are pruned.
 
 	enum GRAPH_LABEL {
@@ -99,6 +105,29 @@ public class gSpan {
 		directed = true;
 
 		read(reader);
+		
+		
+		// ste weights. 
+		// Expected: weight * amount = 100
+		if (totalCorrectUses > totalMisuses) {
+			// majority class is "C"
+			AWeight = 100.0 / totalCorrectUses;
+			BWeight = 100.0 / totalMisuses;
+		} else {
+			// majority class is "M"
+			AWeight = 100.0 / totalMisuses ;
+			BWeight = 100.0 / totalCorrectUses;
+		}
+		
+		UWeight = 100.0 / totalUnlabeled;
+		
+		System.out.println("totalCorrectUses=" + totalCorrectUses);
+		System.out.println("totalMisuses=" + totalMisuses);
+		System.out.println("totalUnlabeled=" + totalUnlabeled);
+		System.out.println("weight are : AWeight=" + AWeight + ", BWeight=" + BWeight + ", UWeight=" + UWeight);
+		System.out.println(UWeight);
+		
+		
 		runIntern();
 		
 	}
@@ -272,7 +301,8 @@ public class gSpan {
 			return;
 
 		int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
-		if (countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) > countsOfLabels.get(GRAPH_LABEL.MISUSE)) {
+		if (totalCorrectUses > totalMisuses) {
+			LoggingUtils.logOnce("Majority class is correct usage");
 			// correct uses are the majority case, so A is the "Correct use" (C) label
 			A_S0 = totalCorrectUses - countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
 			A_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
@@ -281,6 +311,7 @@ public class gSpan {
 			U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 			U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 		} else {
+			LoggingUtils.logOnce("Majority class is misuse");
 			// misuses are the majority case, so A is the "Misuse" (M) label
 			A_S0 = totalMisuses - countsOfLabels.get(GRAPH_LABEL.MISUSE);
 			A_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
@@ -289,9 +320,10 @@ public class gSpan {
 			U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 			U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 		}
-		int q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
+		double q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
+		
 
-		double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1);
+		double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
 		if (upperBound <= theta && selectedSubgraphFeatures.size() >= numberOfFeatures) {
 			return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
 					// prune the branch
@@ -417,22 +449,22 @@ public class gSpan {
 		}
 	}
 
-	private int computeQuality(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
-		int q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1);
+	private double computeQuality(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
+		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
 		if (q_s > theta || selectedSubgraphFeatures.size() < numberOfFeatures) {
 			
 			if (selectedSubgraphFeatures.size() >= numberOfFeatures) {
 				// drop weakest feature
 				long toDrop = -100; 
 				double toDropValue = Integer.MAX_VALUE; 
-				for (Entry<Long, Integer> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
+				for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
 					if (subgraphEntry.getValue() < toDropValue) {
 						toDrop = subgraphEntry.getKey();
 						toDropValue = subgraphEntry.getValue();
 						continue;
 					}
 				}
-				Integer removed = selectedSubgraphFeatures.remove(toDrop);
+				Double removed = selectedSubgraphFeatures.remove(toDrop);
 				if (removed == null) {
 					throw new RuntimeException("can't find toDrop=" + toDrop + " and currently theta=" + theta);
 				}
@@ -442,15 +474,16 @@ public class gSpan {
 				assert selectedSubgraphFeatures.size() <= numberOfFeatures;
 			}
 			
-			theta = Integer.MAX_VALUE;
-			for (Entry<Long, Integer> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
+			theta = Double.MAX_VALUE;
+			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
 				theta = Math.min(theta, subgraphEntry.getValue());
 			}
 			
 			selectedSubgraphFeatures.put(ID, q_s);
 			
-			System.out.println("debug!: ID=" + ID + " , q_s=" + q_s + " , A_S0="+A_S0 + " , A_S1=" +A_S1);
-			System.out.println("\t: " + "B_S0=" + B_S0 + " , B_S1="+B_S1 + " , U_S0=" +U_S0 + " , U_S1=" +U_S1);
+			System.out.println("\tdebug!: ID=" + ID + " , q_s=" + q_s);
+			System.out.println("\t.. A_S0="+A_S0 + " , A_S1=" +A_S1);
+			System.out.println("\t.. " + "B_S0=" + B_S0 + " , B_S1="+B_S1 + " , U_S0=" +U_S0 + " , U_S1=" +U_S1);
 		}
 		return q_s;
 	}

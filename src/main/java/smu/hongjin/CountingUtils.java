@@ -15,41 +15,45 @@ import java.util.stream.Collectors;
 
 public class CountingUtils {
 
-	public static int initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1) {
+	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, double AWeight,
+			double BWeight, double UWeight) {
 		// first component: from original CORK paper
 		// ("Near-optimal supervised feature selection among frequent subgraphs" by
 		// Thoma et al.)
 		// SIAM International Conference on Data Mining. 2009
 		// SIAM is a rank A conference.
-		int correspondanceBetweenLabels = -1 * (A_S0 * B_S0 + A_S1 * B_S1);
+		double correspondanceBetweenLabels = -1 * (AWeight * A_S0 * BWeight * B_S0 + AWeight * A_S1 * BWeight * B_S1);
 
 		// second component: incentize skewedness. The more the unlabeled data shifts to
 		// the majority class, the better
-		int skewedness = U_S1 * A_S1;
+		double skewedness = UWeight * U_S1 * AWeight * A_S1;
 
 		// third component: penalize unlabeled data that is still unlabeled;
-		int lackOfLabels = -1 * U_S0 * U_S0;
+		double lackOfLabels = -1 * UWeight * U_S0 * UWeight * U_S0;
 
 		return correspondanceBetweenLabels + skewedness + lackOfLabels;
 	}
 
-	public static double upperBound(int q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1) {
+	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,  double AWeight,
+			double BWeight, double UWeight) {
 		// first component upper bound: from original CORK paper
 		// "Near-optimal supervised feature selection among frequent subgraphs" by Thoma
 		// et al.
-		int maxCorrespondanceIncrease = Math.max(Math.max(A_S1 * (B_S1 - B_S0), B_S1 * (A_S1 - A_S0)), 0);
-		
+		double maxCorrespondanceIncrease = Math.max(
+				Math.max(
+						AWeight * A_S1 * (BWeight * (B_S1 - B_S0)), BWeight * B_S1 * (AWeight * (A_S1 - A_S0))), 0);
+
 		// second component upper bound: 0
 		// both U_S1 and A_S1 cannot increase
-		
+
 		// third component upper bound: 0
 		// the best case is that U_S0 does not increase. i.e U_S1 does not decrease
-		
-		// Therefore, in the end, it's the same upper bound computation from the CORK paper
+
+		// Therefore, in the end, it's the same upper bound computation from the CORK
+		// paper
 		return q_s + maxCorrespondanceIncrease;
 	}
 
-	
 	// actually we don't have to do this for all subgraphs.
 	public static Map<Long, Double> findClosestLabelledPointForKUnLabelled2(int k, Set<Long> subgraphIds,
 			Map<Long, Set<Long>> misuseSubgraphCoverage, Map<Long, Set<Long>> correctUseSubgraphCoverage,
@@ -193,18 +197,15 @@ public class CountingUtils {
 
 		return result;
 	}
-	
-	
+
 	public static void writeGraphFeatures(Map<Long, Set<Integer>> coverage, BufferedWriter writer) throws IOException {
 		System.out.println("Consolidating and writing graph and their subgraph features");
 		List<Integer> graphs = new ArrayList<>();
 		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
 			graphs.addAll(entry.getValue());
 		}
-		List<Long> features = coverage.keySet().stream()
-				.sorted()
-				.collect(Collectors.toList());
-		
+		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
+
 		// <graph id>, feature_1, feature_2, feature_3, ... \n
 		for (Integer graph : graphs) {
 			writer.write(graph + ",");
@@ -217,9 +218,8 @@ public class CountingUtils {
 			}
 			writer.write("\n");
 		}
-		
+
 		System.out.println("Completed consolidation and writing");
-		
 	}
-	
+
 }
