@@ -23,7 +23,7 @@ public class Main {
                 gSpan gSpan = new gSpan();
                 System.out.println("gSpan is mining...");
                 gSpan.run(reader, writer, arguments.minSup, arguments.maxNodeNum, arguments.minNodeNum);
-                System.out.println("It's done! The result is in the " + arguments.outFilePath + " .");
+                System.out.println("It's done! The result is in  " + arguments.outFilePath + " .");
                 
                 try (BufferedWriter selectedSubGraphWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_best_subgraphs.txt"))) {
         			for (Map.Entry<Long, Double> subgraphFeature : gSpan.selectedSubgraphFeatures.entrySet()) {
@@ -31,11 +31,11 @@ public class Main {
         				selectedSubGraphWriter.write("\n");
         			}
         		}
-                System.out.println("The identified discriminative subgraphs are in the " + arguments.outFilePath + "_best_subgraphs.txt");
+                System.out.println("The identified discriminative subgraphs are in  " + arguments.outFilePath + "_best_subgraphs.txt");
             	try(BufferedWriter featuresWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_features.txt" ))) {
-        			CountingUtils.writeGraphFeatures(gSpan.coverage, featuresWriter);
+        			CountingUtils.writeGraphFeatures(gSpan, gSpan.coverage, featuresWriter);
         		}
-            	System.out.println("The feature vectors of labeled graphs are in the " + arguments.outFilePath + "_features.txt");
+            	System.out.println("The feature vectors of labeled graphs are in " + arguments.outFilePath + "_features.txt");
             }
         }
 		

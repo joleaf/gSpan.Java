@@ -13,6 +13,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
 
+import io.github.tonyzzx.gspan.gSpan;
+
 public class CountingUtils {
 
 	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, double AWeight,
@@ -198,28 +200,43 @@ public class CountingUtils {
 		return result;
 	}
 
-	public static void writeGraphFeatures(Map<Long, Set<Integer>> coverage, BufferedWriter writer) throws IOException {
-		System.out.println("Consolidating and writing graph and their subgraph features");
+	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, BufferedWriter writer) throws IOException {
+		System.out.println("\tConsolidating and writing graph and their subgraph features");
 		List<Integer> graphs = new ArrayList<>();
 		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
 			graphs.addAll(entry.getValue());
 		}
 		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
 
+		writer.write("graph_id, is_correct");
+		for (Long feature : features) {
+			writer.write(",feature_" + feature);
+		}
+		writer.write("\n");
+		
 		// <graph id>, feature_1, feature_2, feature_3, ... \n
 		for (Integer graph : graphs) {
 			writer.write(graph + ",");
+			
+			if (gSpan.correctUses.contains(graph)) {
+				writer.write("1");
+			} else if (gSpan.misuses.contains(graph)) {
+				writer.write("0");
+			} else {
+				throw new RuntimeException("graph label is incorrect somehow " + graph);
+			}
+			
 			for (Long feature : features) {
 				if (coverage.get(feature).contains(graph)) {
-					writer.write("1,");
+					writer.write(",1");
 				} else {
-					writer.write("0,");
+					writer.write(",0");
 				}
 			}
 			writer.write("\n");
 		}
 
-		System.out.println("Completed consolidation and writing");
+		System.out.println("\tCompleted consolidation and writing");
 	}
 
 }

@@ -62,8 +62,8 @@ public class gSpan {
 	// There is no efficient way to enumerate them all
 	Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
 
-	Set<Integer> misuses = new HashSet<>();
-	Set<Integer> correctUses = new HashSet<>();
+	public Set<Integer> misuses = new HashSet<>();
+	public Set<Integer> correctUses = new HashSet<>();
 
 	private double theta = Double.MAX_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches lower than
 								// this value are pruned.
@@ -72,7 +72,6 @@ public class gSpan {
 		MISUSE, CORRECT_USE, UNLABELED
 	}
 
-	// HJ TODO: i should write this to file. make it easy to find the nearest neighbour. 
 	public Map<Long, Set<Integer>> coverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
 	
 	public gSpan() {
@@ -119,7 +118,7 @@ public class gSpan {
 			BWeight = 100.0 / totalCorrectUses;
 		}
 		
-		UWeight = 100.0 / totalUnlabeled;
+		UWeight = 75.0 / totalUnlabeled;
 		
 		System.out.println("totalCorrectUses=" + totalCorrectUses);
 		System.out.println("totalMisuses=" + totalMisuses);
@@ -144,12 +143,15 @@ public class gSpan {
 			TRANS.add(g);
 			if (g.label == 'M') {
 				misuses.add(Math.toIntExact(id));
-				totalMisuses += g.quantity;
+//				totalMisuses += g.quantity;
+				totalMisuses += 1;
 			} else if (g.label == 'C') {
 				correctUses.add(Math.toIntExact(id));
-				totalCorrectUses += g.quantity;
+//				totalCorrectUses += g.quantity;
+				totalCorrectUses += 1;
 			} else if (g.label == 'U') {
-				totalUnlabeled += g.quantity;
+//				totalUnlabeled += g.quantity;
+				totalUnlabeled += 1;
 			} else {
 				throw new RuntimeException("huh? label seems to be " + g.label + ", at id=" + id);
 			}
@@ -300,6 +302,19 @@ public class gSpan {
 		if (sup < minSup)
 			return;
 
+		
+
+		/*
+		 * The minimal DFS code check is more expensive than the support check, hence it
+		 * is done now, after checking the support.
+		 */
+		if (!isMin()) {
+			return;
+		}
+
+		// Output the frequent substructure
+		report(sup);
+		
 		int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
 		if (totalCorrectUses > totalMisuses) {
 			LoggingUtils.logOnce("Majority class is correct usage");
@@ -328,17 +343,6 @@ public class gSpan {
 			return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
 					// prune the branch
 		}
-
-		/*
-		 * The minimal DFS code check is more expensive than the support check, hence it
-		 * is done now, after checking the support.
-		 */
-		if (!isMin()) {
-			return;
-		}
-
-		// Output the frequent substructure
-		report(sup);
 
 		/*
 		 * In case we have a valid upper bound and our graph already exceeds it, return.
@@ -451,9 +455,12 @@ public class gSpan {
 
 	private double computeQuality(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
 		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
+		
+		int originalSize = selectedSubgraphFeatures.size();
 		if (q_s > theta || selectedSubgraphFeatures.size() < numberOfFeatures) {
 			
-			if (selectedSubgraphFeatures.size() >= numberOfFeatures) {
+			// if adding the new feature will cause this to be bigger
+			if (selectedSubgraphFeatures.size() == numberOfFeatures) {
 				// drop weakest feature
 				long toDrop = -100; 
 				double toDropValue = Integer.MAX_VALUE; 
@@ -464,14 +471,16 @@ public class gSpan {
 						continue;
 					}
 				}
-				Double removed = selectedSubgraphFeatures.remove(toDrop);
-				if (removed == null) {
+				if (toDrop == -100) {
 					throw new RuntimeException("can't find toDrop=" + toDrop + " and currently theta=" + theta);
 				}
+				selectedSubgraphFeatures.remove(toDrop);
 				// also clean up the coverage. Don't need this subgraph anymore 
 				coverage.remove(toDrop);
 				
-				assert selectedSubgraphFeatures.size() <= numberOfFeatures;
+				if (!(selectedSubgraphFeatures.size() == numberOfFeatures - 1)) {
+					throw new RuntimeException("Unexpected size");
+				}
 			}
 			
 			theta = Double.MAX_VALUE;
@@ -479,11 +488,20 @@ public class gSpan {
 				theta = Math.min(theta, subgraphEntry.getValue());
 			}
 			
+			if (selectedSubgraphFeatures.containsKey(ID)) {
+				throw new RuntimeException("iterating into the same subgraph ID again! " + ID);
+			}
+			
 			selectedSubgraphFeatures.put(ID, q_s);
 			
 			System.out.println("\tdebug!: ID=" + ID + " , q_s=" + q_s);
 			System.out.println("\t.. A_S0="+A_S0 + " , A_S1=" +A_S1);
 			System.out.println("\t.. " + "B_S0=" + B_S0 + " , B_S1="+B_S1 + " , U_S0=" +U_S0 + " , U_S1=" +U_S1);
+		}
+		
+		
+		if (originalSize > selectedSubgraphFeatures.size()) {
+			throw new RuntimeException("the subgraph vector shrank!");
 		}
 		return q_s;
 	}
@@ -497,7 +515,7 @@ public class gSpan {
 	// HJ: "support" isn't exaclty the number of graphs anymore, but now its the number of projects
 	private int support(Projected projected) {
 		int oid = 0xffffffff;
-		int size = 0;
+		int size = 0;		
 
 		for (PDFS cur : projected) {
 			if (oid != cur.id) {
@@ -511,15 +529,15 @@ public class gSpan {
 				assert !(isMisuse && isCorrectUse); // can't both be true at the same time
 
 				if (isMisuse) {
-					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + TRANS.get(cur.id).quantity);
+					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + 1); //TRANS.get(cur.id).quantity);
 					coverage.putIfAbsent(ID, new HashSet<>());
 					coverage.get(ID).add(cur.id);
 				} else if (isCorrectUse) {
-					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + TRANS.get(cur.id).quantity);
+					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + 1); //TRANS.get(cur.id).quantity);
 					coverage.putIfAbsent(ID, new HashSet<>());
 					coverage.get(ID).add(cur.id);
 				} else { // unlabeled
-					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) + TRANS.get(cur.id).quantity);
+					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) + 1);// TRANS.get(cur.id).quantity);
 				}
 
 			}
