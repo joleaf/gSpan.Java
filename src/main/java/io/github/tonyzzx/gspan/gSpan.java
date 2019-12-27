@@ -44,7 +44,6 @@ public class gSpan {
 	private NavigableMap<Integer, Integer> singleVertexLabel;
 
 	// HJ for counting coverage of dataset
-	// subgraph ID -> set of graphs
 	int totalMisuses = 0;
 	int totalCorrectUses = 0;
 	int totalUnlabeled = 0;
@@ -55,18 +54,21 @@ public class gSpan {
 
 	// currently selected set of subgraph features
 	// There is no efficient way to enumerate them all
-	Map<Long, Integer> currentSelectedSubgraphFeatures = new HashMap<>();
+	Map<Long, Integer> selectedSubgraphFeatures = new HashMap<>();
 
 	Set<Integer> misuses = new HashSet<>();
 	Set<Integer> correctUses = new HashSet<>();
 
-	private int theta = -99999; // the min-value of "upper-bound of GSEMI" that we need. Branches lower than
+	private int theta = Integer.MIN_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches lower than
 								// this value are pruned.
 
 	enum GRAPH_LABEL {
 		MISUSE, CORRECT_USE, UNLABELED
 	}
 
+	// HJ TODO: i should write this to file. make it easy to find the nearest neighbour. 
+	public Map<Long, Set<Integer>> coverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
+	
 	public gSpan() {
 		TRANS = new ArrayList<>();
 		DFS_CODE = new DFSCode();
@@ -98,6 +100,7 @@ public class gSpan {
 
 		read(reader);
 		runIntern();
+		
 	}
 
 	private void read(FileReader is) throws IOException {
@@ -105,6 +108,11 @@ public class gSpan {
 		long id = 0;
 		while (true) {
 			Graph g = new Graph(directed);
+
+			read = g.read(read);
+			if (g.isEmpty())
+				break;
+			TRANS.add(g);
 			if (g.label == 'M') {
 				misuses.add(Math.toIntExact(id));
 				totalMisuses += g.quantity;
@@ -113,12 +121,10 @@ public class gSpan {
 				totalCorrectUses += g.quantity;
 			} else if (g.label == 'U') {
 				totalUnlabeled += g.quantity;
+			} else {
+				throw new RuntimeException("huh? label seems to be " + g.label + ", at id=" + id);
 			}
-
-			read = g.read(read);
-			if (g.isEmpty())
-				break;
-			TRANS.add(g);
+			
 			id++;
 		}
 		read.close();
@@ -212,13 +218,6 @@ public class gSpan {
 				}
 			}
 		}
-		
-		try (BufferedWriter writer = new BufferedWriter(new FileWriter("best_subgraphs.txt"))) {
-			for (Map.Entry<Long, Integer> subgraphFeature : currentSelectedSubgraphFeatures.entrySet()) {
-				writer.write(subgraphFeature.getKey() + "," + subgraphFeature.getValue());
-				writer.write("\n");
-			}
-		}
 	}
 
 	/**
@@ -290,29 +289,10 @@ public class gSpan {
 			U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 			U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 		}
-		int q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1);
-		if (q_s > theta || currentSelectedSubgraphFeatures.size() < numberOfFeatures) {
-			currentSelectedSubgraphFeatures.put(ID, q_s);
-			if (currentSelectedSubgraphFeatures.size() > numberOfFeatures) {
-				// drop weakest feature
-				// HJ: this won't work if theta is a float/double. Remember to change if the
-				// scoring is ever modified
-				long toDrop = -100;
-				int newTheta = -999;
-				for (Entry<Long, Integer> subgraphEntry : currentSelectedSubgraphFeatures.entrySet()) {
-					if (subgraphEntry.getValue() == theta) {
-						toDrop = subgraphEntry.getKey();
-						continue;
-					}
-					newTheta = Math.min(newTheta, subgraphEntry.getValue());
-				}
-				currentSelectedSubgraphFeatures.remove(toDrop);
-				theta = newTheta;
-			}
-		}
+		int q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
 
 		double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1);
-		if (upperBound < theta && currentSelectedSubgraphFeatures.size() < numberOfFeatures) {
+		if (upperBound <= theta && selectedSubgraphFeatures.size() >= numberOfFeatures) {
 			return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
 					// prune the branch
 		}
@@ -437,12 +417,51 @@ public class gSpan {
 		}
 	}
 
+	private int computeQuality(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
+		int q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1);
+		if (q_s > theta || selectedSubgraphFeatures.size() < numberOfFeatures) {
+			
+			if (selectedSubgraphFeatures.size() >= numberOfFeatures) {
+				// drop weakest feature
+				long toDrop = -100; 
+				double toDropValue = Integer.MAX_VALUE; 
+				for (Entry<Long, Integer> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
+					if (subgraphEntry.getValue() < toDropValue) {
+						toDrop = subgraphEntry.getKey();
+						toDropValue = subgraphEntry.getValue();
+						continue;
+					}
+				}
+				Integer removed = selectedSubgraphFeatures.remove(toDrop);
+				if (removed == null) {
+					throw new RuntimeException("can't find toDrop=" + toDrop + " and currently theta=" + theta);
+				}
+				// also clean up the coverage. Don't need this subgraph anymore 
+				coverage.remove(toDrop);
+				
+				assert selectedSubgraphFeatures.size() <= numberOfFeatures;
+			}
+			
+			theta = Integer.MAX_VALUE;
+			for (Entry<Long, Integer> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
+				theta = Math.min(theta, subgraphEntry.getValue());
+			}
+			
+			selectedSubgraphFeatures.put(ID, q_s);
+			
+			System.out.println("debug!: ID=" + ID + " , q_s=" + q_s + " , A_S0="+A_S0 + " , A_S1=" +A_S1);
+			System.out.println("\t: " + "B_S0=" + B_S0 + " , B_S1="+B_S1 + " , U_S0=" +U_S0 + " , U_S1=" +U_S1);
+		}
+		return q_s;
+	}
+
 	private void resetCountsOfLabels() {
 		countsOfLabels.put(GRAPH_LABEL.MISUSE, 0);
 		countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, 0);
 		countsOfLabels.put(GRAPH_LABEL.UNLABELED, 0);
 	}
 
+	// HJ: "support" isn't exaclty the number of graphs anymore, but now its the number of projects
 	private int support(Projected projected) {
 		int oid = 0xffffffff;
 		int size = 0;
@@ -459,11 +478,15 @@ public class gSpan {
 				assert !(isMisuse && isCorrectUse); // can't both be true at the same time
 
 				if (isMisuse) {
-					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + 1);
+					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + TRANS.get(cur.id).quantity);
+					coverage.putIfAbsent(ID, new HashSet<>());
+					coverage.get(ID).add(cur.id);
 				} else if (isCorrectUse) {
-					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + 1);
+					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + TRANS.get(cur.id).quantity);
+					coverage.putIfAbsent(ID, new HashSet<>());
+					coverage.get(ID).add(cur.id);
 				} else { // unlabeled
-					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) + 1);
+					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) + TRANS.get(cur.id).quantity);
 				}
 
 			}

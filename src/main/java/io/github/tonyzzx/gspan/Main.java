@@ -2,10 +2,14 @@ package io.github.tonyzzx.gspan;
 
 import org.apache.commons.cli.*;
 
+import smu.hongjin.CountingUtils;
+
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
@@ -19,9 +23,22 @@ public class Main {
                 gSpan gSpan = new gSpan();
                 System.out.println("gSpan is mining...");
                 gSpan.run(reader, writer, arguments.minSup, arguments.maxNodeNum, arguments.minNodeNum);
-                System.out.println("It's done! The result is in the " + arguments.outFilePath + ".");
+                System.out.println("It's done! The result is in the " + arguments.outFilePath + " .");
+                
+                try (BufferedWriter selectedSubGraphWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_best_subgraphs.txt"))) {
+        			for (Map.Entry<Long, Integer> subgraphFeature : gSpan.selectedSubgraphFeatures.entrySet()) {
+        				selectedSubGraphWriter.write(subgraphFeature.getKey() + "," + subgraphFeature.getValue());
+        				selectedSubGraphWriter.write("\n");
+        			}
+        		}
+                System.out.println("The identified discriminative subgraphs are in the " + arguments.outFilePath + "_best_subgraphs.txt");
+            	try(BufferedWriter featuresWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_features.txt" ))) {
+        			CountingUtils.writeGraphFeatures(gSpan.coverage, featuresWriter);
+        		}
+            	System.out.println("The feature vectors of labeled graphs are in the " + arguments.outFilePath + "_features.txt");
             }
         }
+		
     }
 
     private static class Arguments {

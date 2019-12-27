@@ -1,5 +1,7 @@
 package smu.hongjin;
 
+import java.io.BufferedWriter;
+import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -191,4 +193,33 @@ public class CountingUtils {
 
 		return result;
 	}
+	
+	
+	public static void writeGraphFeatures(Map<Long, Set<Integer>> coverage, BufferedWriter writer) throws IOException {
+		System.out.println("Consolidating and writing graph and their subgraph features");
+		List<Integer> graphs = new ArrayList<>();
+		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
+			graphs.addAll(entry.getValue());
+		}
+		List<Long> features = coverage.keySet().stream()
+				.sorted()
+				.collect(Collectors.toList());
+		
+		// <graph id>, feature_1, feature_2, feature_3, ... \n
+		for (Integer graph : graphs) {
+			writer.write(graph + ",");
+			for (Long feature : features) {
+				if (coverage.get(feature).contains(graph)) {
+					writer.write("1,");
+				} else {
+					writer.write("0,");
+				}
+			}
+			writer.write("\n");
+		}
+		
+		System.out.println("Completed consolidation and writing");
+		
+	}
+	
 }

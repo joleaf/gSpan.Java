@@ -58,10 +58,14 @@ public class Graph extends ArrayList<Vertex> {
             Collections.addAll(result, splitRead);
 
             if (!result.isEmpty()) {
-                if (result.get(0).equals("t")) {
-                    if (!this.isEmpty()) {
+            	if (result.get(0).equals("-")) {
+            		if (!this.isEmpty()) {
                         break;
+                    } else {
+                    	throw new RuntimeException("Unexpected file format");
                     }
+            	} else if (result.get(0).equals("t")) {
+                    
                     char label = result.get(3).charAt(0);
                     // 'U' for unlabeled
                     // 'M' for misuse
