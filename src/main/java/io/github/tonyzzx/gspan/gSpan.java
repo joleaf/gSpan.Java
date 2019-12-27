@@ -56,7 +56,7 @@ public class gSpan {
 	// have few minority class B
 	double AWeight, BWeight, UWeight;
 
-	int numberOfFeatures = 20;
+	int numberOfFeatures = 25;
 
 	EnumMap<GRAPH_LABEL, Integer> countsOfLabels = new EnumMap<>(GRAPH_LABEL.class);
 
@@ -143,15 +143,15 @@ public class gSpan {
 			TRANS.add(g);
 			if (g.label == 'M') {
 				misuses.add(Math.toIntExact(id));
-//				totalMisuses += g.quantity;
-				totalMisuses += 1;
+				totalMisuses += g.quantity;
+//				totalMisuses += 1;
 			} else if (g.label == 'C') {
 				correctUses.add(Math.toIntExact(id));
-//				totalCorrectUses += g.quantity;
-				totalCorrectUses += 1;
+				totalCorrectUses += g.quantity;
+//				totalCorrectUses += 1;
 			} else if (g.label == 'U') {
-//				totalUnlabeled += g.quantity;
-				totalUnlabeled += 1;
+				totalUnlabeled += g.quantity;
+//				totalUnlabeled += 1;
 			} else {
 				throw new RuntimeException("huh? label seems to be " + g.label + ", at id=" + id);
 			}
@@ -567,7 +567,10 @@ public class gSpan {
 				coverage.putIfAbsent(ID, new HashSet<>());
 
 				if (isMisuse) {
-					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE) + 1); // TRANS.get(cur.id).quantity);
+					countsOfLabels.put(GRAPH_LABEL.MISUSE, 
+							countsOfLabels.get(GRAPH_LABEL.MISUSE) 
+//							+ 1); 
+					 + TRANS.get(cur.id).quantity);
 					
 					if (countsOfLabels.get(GRAPH_LABEL.MISUSE) > totalMisuses) {
 						throw new RuntimeException("invalid MISUSE counts");
@@ -576,7 +579,9 @@ public class gSpan {
 //					System.out.println("putting into coverage=" + ID);
 					coverage.get(ID).add(cur.id);
 				} else if (isCorrectUse) {
-					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) + 1); // TRANS.get(cur.id).quantity);
+					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) 
+//							+ 1); 
+					 + TRANS.get(cur.id).quantity);
 //					System.out.println("putting into coverage=" + ID);
 					if (countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) > totalCorrectUses) {
 						throw new RuntimeException("invalid CORRECT_USE counts");
@@ -584,7 +589,9 @@ public class gSpan {
 					
 					coverage.get(ID).add(cur.id);
 				} else { // unlabeled
-					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) + 1);// TRANS.get(cur.id).quantity);
+					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) +
+//							1);
+					 TRANS.get(cur.id).quantity);
 					
 					if (countsOfLabels.get(GRAPH_LABEL.UNLABELED) > totalUnlabeled) {
 						throw new RuntimeException("invalid UNLABELED counts");

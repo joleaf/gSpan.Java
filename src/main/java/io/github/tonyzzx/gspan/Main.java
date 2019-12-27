@@ -110,7 +110,7 @@ public class Main {
                 minSup = sc.nextLong();
                 outFilePath = inFilePath + "_result";
                 
-                maxNodeNum = 5;
+                maxNodeNum = 6;
             }
         }
     }
