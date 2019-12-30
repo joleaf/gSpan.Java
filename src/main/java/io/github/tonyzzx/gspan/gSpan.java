@@ -14,6 +14,7 @@ import java.util.Map.Entry;
 
 import io.github.tonyzzx.gspan.model.DFSCode;
 import io.github.tonyzzx.gspan.model.Edge;
+import io.github.tonyzzx.gspan.model.EfficientHistory;
 import io.github.tonyzzx.gspan.model.Graph;
 import io.github.tonyzzx.gspan.model.History;
 import io.github.tonyzzx.gspan.model.PDFS;
@@ -285,6 +286,9 @@ public class gSpan {
 		DFS_CODE.toGraph(g);
 		os.write("t # " + ID + " * " + sup + System.getProperty("line.separator"));
 		g.write(os);
+		
+		System.out.println("--\tdebug:size of subgraph = " + g.size());
+		System.out.println("\t: # of edges= " + g.edge_size);
 
 		return true;
 	}
@@ -317,7 +321,7 @@ public class gSpan {
 		// Output the frequent substructure
 		boolean isReported = report(sup);
 
-		if (isReported) {
+		if (isReported) {	// isReported == true means that its a frequent subgraph.
 
 			// if it's a valid frequent subgraph, then check if its a valid significant subgraph
 			
@@ -379,10 +383,11 @@ public class gSpan {
 		ArrayList<Edge> edges = new ArrayList<>();
 
 		// Enumerate all possible one edge extensions of the current substructure.
+		System.out.println("iterating over projected which is len= " + projected.size());
 		for (PDFS aProjected : projected) {
 
 			int id = aProjected.id;
-			History history = new History(TRANS.get(id), aProjected);
+			EfficientHistory history = new EfficientHistory(TRANS.get(id), aProjected);
 
 			// XXX: do we have to change something here for directed edges?
 
@@ -391,7 +396,8 @@ public class gSpan {
 				// HJ notes: rmPath.get(0) must be the right-most vertex
 				// see paper; only the right-most vertex can be extended with backwards edge.
 				Edge e = Misc.getBackward(TRANS.get(id), history.get(rmPath.get(i)), history.get(rmPath.get(0)),
-						history);
+						history, 
+						singleVertexLabel, minSup);
 				if (e != null) {
 					int key_1 = DFS_CODE.get(rmPath.get(i)).from;
 					NavigableMap<Integer, Projected> root_1 = new_bck_root.computeIfAbsent(key_1, k -> new TreeMap<>());
@@ -411,7 +417,8 @@ public class gSpan {
 			//
 			// The problem is:
 			// history[rmPath[0]].to > TRANS[id].size()
-			if (Misc.getForwardPure(TRANS.get(id), history.get(rmPath.get(0)), minLabel, history, edges))
+			if (Misc.getForwardPure(TRANS.get(id), history.get(rmPath.get(0)), minLabel, history, edges, 
+					singleVertexLabel, minSup))
 				for (Edge it : edges) {
 					NavigableMap<Integer, NavigableMap<Integer, Projected>> root_1 = new_fwd_root
 							.computeIfAbsent(maxToc, k -> new TreeMap<>());
@@ -427,7 +434,8 @@ public class gSpan {
 				}
 			// backtracked forward
 			for (Integer aRmPath : rmPath)
-				if (Misc.getForwardRmPath(TRANS.get(id), history.get(aRmPath), minLabel, history, edges))
+				if (Misc.getForwardRmPath(TRANS.get(id), history.get(aRmPath), minLabel, history, edges
+						, singleVertexLabel, minSup))
 					for (Edge it : edges) {
 						int key_1 = DFS_CODE.get(aRmPath).from;
 						NavigableMap<Integer, NavigableMap<Integer, Projected>> root_1 = new_fwd_root
@@ -526,7 +534,7 @@ public class gSpan {
 			}
 
 			
-			System.out.println("\tdebug!: ID=" + ID + " , q_s=" + q_s);
+			System.out.println("\t..: ID=" + ID + " , q_s=" + q_s);
 			System.out.print("\t.. A_S0=" + A_S0 + " , A_S1=" + A_S1);
 			System.out.println("\t.. " + "B_S0=" + B_S0 + " , B_S1=" + B_S1 + " ,..  U_S0=" + U_S0 + " , U_S1=" + U_S1);
 		} else {
@@ -659,11 +667,11 @@ public class gSpan {
 
 			for (int i = rmPath.size() - 1; !flg && i >= 1; --i) {
 				for (PDFS cur : projected) {
-					History history = new History(GRAPH_IS_MIN, cur); // history allows us to easily determine if a
+					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur); // history allows us to easily determine if a
 																		// vertex or edge is already part of the
 																		// projected graph
 					Edge e = Misc.getBackward(GRAPH_IS_MIN, history.get(rmPath.get(i)), history.get(rmPath.get(0)),
-							history);
+							history, singleVertexLabel, minSup);
 					if (e != null) {
 						int key_1 = e.eLabel;
 						Projected root_1 = root.get(key_1);
@@ -694,8 +702,8 @@ public class gSpan {
 			ArrayList<Edge> edges = new ArrayList<>();
 
 			for (PDFS cur : projected) {
-				History history = new History(GRAPH_IS_MIN, cur);
-				if (Misc.getForwardPure(GRAPH_IS_MIN, history.get(rmPath.get(0)), minLabel, history, edges)) {
+				EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur);
+				if (Misc.getForwardPure(GRAPH_IS_MIN, history.get(rmPath.get(0)), minLabel, history, edges, singleVertexLabel, minSup)) {
 					flg = true;
 					newFrom = maxToc;
 					for (Edge it : edges) {
@@ -714,8 +722,8 @@ public class gSpan {
 
 			for (int i = 0; !flg && i < rmPath.size(); ++i) {
 				for (PDFS cur : projected) {
-					History history = new History(GRAPH_IS_MIN, cur);
-					if (Misc.getForwardRmPath(GRAPH_IS_MIN, history.get(rmPath.get(i)), minLabel, history, edges)) {
+					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur);
+					if (Misc.getForwardRmPath(GRAPH_IS_MIN, history.get(rmPath.get(i)), minLabel, history, edges, singleVertexLabel, minSup)) {
 						flg = true;
 						newFrom = DFS_CODE_IS_MIN.get(rmPath.get(i)).from;
 						for (Edge it : edges) {

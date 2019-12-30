@@ -220,7 +220,7 @@ public class CountingUtils {
 		}
 		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
 
-		writer.write("graph_id, is_correct");
+		writer.write("graph_id,is_correct");
 		for (Long feature : features) {
 			writer.write(",feature_" + feature);
 		}

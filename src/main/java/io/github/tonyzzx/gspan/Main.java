@@ -9,12 +9,14 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) throws IOException {
         Arguments arguments = Arguments.getInstance(args);
+        System.out.println("args: " + Arrays.toString(args));
 
         File inFile = new File(arguments.inFilePath);
         File outFile = new File(arguments.outFilePath);
@@ -96,7 +98,7 @@ public class Main {
             minSup = Long.parseLong(cmd.getOptionValue("s"));
             minNodeNum = Long.parseLong(cmd.getOptionValue("i", "0"));
             maxNodeNum = Long.parseLong(cmd.getOptionValue("a", String.valueOf(Long.MAX_VALUE)));
-            outFilePath = cmd.getOptionValue("r", inFilePath + "_result");
+            outFilePath = cmd.getOptionValue("r", inFilePath.replace(".txt", "") + "_result");
         }
 
         /***

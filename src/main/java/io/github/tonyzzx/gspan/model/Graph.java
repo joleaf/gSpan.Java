@@ -7,7 +7,7 @@ import java.util.*;
 
 public class Graph extends ArrayList<Vertex> {
     private static final long serialVersionUID = 1L;
-    int edge_size = 0;
+    public int edge_size = 0;
     boolean directed = false;
     
     public char label;
