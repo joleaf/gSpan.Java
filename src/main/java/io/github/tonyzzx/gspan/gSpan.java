@@ -395,7 +395,7 @@ public class gSpan {
 			for (int i = rmPath.size() - 1; i >= 1; --i) {
 				// HJ notes: rmPath.get(0) must be the right-most vertex
 				// see paper; only the right-most vertex can be extended with backwards edge.
-				Edge e = Misc.getBackward(TRANS.get(id), history.get(rmPath.get(i)), history.get(rmPath.get(0)),
+				Edge e = Misc.getBackward(TRANS.get(id), history.ordering.get(rmPath.get(i)), history.ordering.get(rmPath.get(0)),
 						history, 
 						singleVertexLabel, minSup);
 				if (e != null) {
@@ -417,7 +417,7 @@ public class gSpan {
 			//
 			// The problem is:
 			// history[rmPath[0]].to > TRANS[id].size()
-			if (Misc.getForwardPure(TRANS.get(id), history.get(rmPath.get(0)), minLabel, history, edges, 
+			if (Misc.getForwardPure(TRANS.get(id), history.ordering.get(rmPath.get(0)), minLabel, history, edges, 
 					singleVertexLabel, minSup))
 				for (Edge it : edges) {
 					NavigableMap<Integer, NavigableMap<Integer, Projected>> root_1 = new_fwd_root
@@ -434,7 +434,7 @@ public class gSpan {
 				}
 			// backtracked forward
 			for (Integer aRmPath : rmPath)
-				if (Misc.getForwardRmPath(TRANS.get(id), history.get(aRmPath), minLabel, history, edges
+				if (Misc.getForwardRmPath(TRANS.get(id), history.ordering.get(aRmPath), minLabel, history, edges
 						, singleVertexLabel, minSup))
 					for (Edge it : edges) {
 						int key_1 = DFS_CODE.get(aRmPath).from;
@@ -670,7 +670,7 @@ public class gSpan {
 					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur); // history allows us to easily determine if a
 																		// vertex or edge is already part of the
 																		// projected graph
-					Edge e = Misc.getBackward(GRAPH_IS_MIN, history.get(rmPath.get(i)), history.get(rmPath.get(0)),
+					Edge e = Misc.getBackward(GRAPH_IS_MIN, history.ordering.get(rmPath.get(i)), history.ordering.get(rmPath.get(0)),
 							history, singleVertexLabel, minSup);
 					if (e != null) {
 						int key_1 = e.eLabel;
@@ -703,7 +703,7 @@ public class gSpan {
 
 			for (PDFS cur : projected) {
 				EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur);
-				if (Misc.getForwardPure(GRAPH_IS_MIN, history.get(rmPath.get(0)), minLabel, history, edges, singleVertexLabel, minSup)) {
+				if (Misc.getForwardPure(GRAPH_IS_MIN, history.ordering.get(rmPath.get(0)), minLabel, history, edges, singleVertexLabel, minSup)) {
 					flg = true;
 					newFrom = maxToc;
 					for (Edge it : edges) {
@@ -723,7 +723,7 @@ public class gSpan {
 			for (int i = 0; !flg && i < rmPath.size(); ++i) {
 				for (PDFS cur : projected) {
 					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur);
-					if (Misc.getForwardRmPath(GRAPH_IS_MIN, history.get(rmPath.get(i)), minLabel, history, edges, singleVertexLabel, minSup)) {
+					if (Misc.getForwardRmPath(GRAPH_IS_MIN, history.ordering.get(rmPath.get(i)), minLabel, history, edges, singleVertexLabel, minSup)) {
 						flg = true;
 						newFrom = DFS_CODE_IS_MIN.get(rmPath.get(i)).from;
 						for (Edge it : edges) {
