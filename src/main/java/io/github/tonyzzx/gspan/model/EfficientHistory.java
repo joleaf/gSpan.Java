@@ -8,8 +8,8 @@ import java.util.Set;
 import java.util.Vector;
 
 public class EfficientHistory {
-    private static final long serialVersionUID = 1L;
-    private Set<Integer> edge;
+
+	private Set<Integer> edge;
     private Set<Integer> vertex;
     
     public List<Edge> ordering;

@@ -58,6 +58,9 @@ public class gSpan {
 	double AWeight, BWeight, UWeight;
 
 	int numberOfFeatures = 25;
+	
+	// a minimal quality q_s to beat
+	double minimalQS;
 
 	EnumMap<GRAPH_LABEL, Integer> countsOfLabels = new EnumMap<>(GRAPH_LABEL.class);
 
@@ -127,6 +130,22 @@ public class gSpan {
 		System.out.println("totalMisuses=" + totalMisuses);
 		System.out.println("totalUnlabeled=" + totalUnlabeled);
 		System.out.println("weight are : AWeight=" + AWeight + ", BWeight=" + BWeight + ", UWeight=" + UWeight);
+		
+		if (totalCorrectUses > totalMisuses) {
+			minimalQS = CountingUtils.initialFeatureScore(
+					(int) (totalCorrectUses * 0.3), (int) (totalCorrectUses * 0.7), 
+					(int) (totalMisuses *0.3), (int) (totalMisuses * 0.7), 
+					(int) (totalUnlabeled * 0.3), (int) (totalUnlabeled * 0.7), 
+					AWeight, BWeight, UWeight);
+		} else {
+			minimalQS = CountingUtils.initialFeatureScore(
+					(int) (totalMisuses *0.3), (int) (totalMisuses * 0.7),
+					(int) (totalCorrectUses * 0.3), (int) (totalCorrectUses * 0.7), 
+					(int) (totalUnlabeled * 0.3), (int) (totalUnlabeled * 0.7), 
+					AWeight, BWeight, UWeight);
+		}
+		System.out.println("Worst q_s=" + minimalQS + ". This assumes 70% correspondence between A, B, and U.");
+		theta = minimalQS;
 
 		runIntern();
 
@@ -347,7 +366,7 @@ public class gSpan {
 			}
 			double q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
 
-			++ID;
+			++ID; // must increase since this ID was used for `report`
 
 			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
 					UWeight);
@@ -369,6 +388,10 @@ public class gSpan {
 			coverage.remove(ID); // ID didn't get reported, it may be reused for another subgraph
 			return;
 		}
+		
+		if (DFS_CODE.countNode() == maxPat_max) {
+			return; 
+		}
 
 		/*
 		 * We just outputted a frequent sub-graph. As it is frequent enough, so might be
@@ -383,7 +406,7 @@ public class gSpan {
 		ArrayList<Edge> edges = new ArrayList<>();
 
 		// Enumerate all possible one edge extensions of the current substructure.
-		System.out.println("iterating over projected which is len= " + projected.size());
+		System.out.println("\titerating over projected which is len= " + projected.size());
 		for (PDFS aProjected : projected) {
 
 			int id = aProjected.id;
@@ -479,7 +502,8 @@ public class gSpan {
 		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
 
 		int originalSize = selectedSubgraphFeatures.size();
-		if (q_s > theta || selectedSubgraphFeatures.size() < numberOfFeatures) {
+		if (q_s > theta) { 
+//				|| selectedSubgraphFeatures.size() < numberOfFeatures) {
 
 			// if adding the new feature will cause this to be bigger
 			if (selectedSubgraphFeatures.size() == numberOfFeatures) {
@@ -510,7 +534,7 @@ public class gSpan {
 			}
 
 			// set new value of theta, which is the minimal quality value among the selected (so far) subgraphs
-			theta = Double.MAX_VALUE;
+			theta = this.minimalQS;
 			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
 				theta = Math.min(theta, subgraphEntry.getValue());
 			}
