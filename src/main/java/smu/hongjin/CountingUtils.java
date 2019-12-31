@@ -29,14 +29,17 @@ public class CountingUtils {
 		// i.e. incentize correspondense between U and A
 		double skewedness = UWeight * U_S1 * AWeight * A_S1;
 		
-		// but we also want to incentize features that separates unlabeled data from the minority class
-		// i.e. punish corresponse between U and B
-		skewedness -= (UWeight * U_S1 * BWeight * B_S0 + UWeight * U_S1 * BWeight * B_S1);
+		// some U and many of B
+		skewedness += UWeight * U_S0 * BWeight * B_S1;
 		
 		// third component: penalty for unlabeled data that is still unlabeled;
-		double lackOfLabels = -1 * UWeight * U_S0 * UWeight * U_S0;
+//		double lackOfLabels = -1 * UWeight * U_S0 * UWeight * U_S0;		// 
 
-		return correspondanceBetweenLabels + skewedness + lackOfLabels;
+		return correspondanceBetweenLabels; // + skewedness;
+		
+		// a feature is good w.r.t. to the misuse distribution if
+		// 		1. unlabeled distribution is skewed
+		// 		2.  
 	}
 
 	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,  double AWeight,
@@ -50,16 +53,11 @@ public class CountingUtils {
 
 		// second component upper bound: 
 		// both U_S1 and A_S1 cannot increase
-		// but the penalty for U and B can decrease
-		double maxSkewIncrease = Math.max(
-				Math.max(
-						UWeight * U_S1 * (BWeight * (B_S1 - B_S0)), BWeight * B_S1 * (UWeight * (U_S1 - U_S0))), 0);
-		
-		// third component upper bound: 0
-		// the best case is that U_S0 does not increase. i.e U_S1 does not decrease
+		// but the penalty for U and B can decrease.
+		// U_S0 can increase, although B_S1 cannot. Thus, the best case is that all of U_S1 becomes U_S0
+		double maxSkewIncrease = 0 ;// UWeight * (U_S1) * BWeight * B_S1;
+				
 
-		// Therefore, in the end, it's the same upper bound computation from the CORK
-		// paper
 		return q_s + maxCorrespondanceIncrease + maxSkewIncrease;
 	}
 

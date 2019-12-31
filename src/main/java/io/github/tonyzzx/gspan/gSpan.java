@@ -67,11 +67,12 @@ public class gSpan {
 	// currently selected set of subgraph features
 	// There is no efficient way to enumerate them all
 	public Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
+//	public Long 
 
 	public Set<Integer> misuses = new HashSet<>();
 	public Set<Integer> correctUses = new HashSet<>();
 
-	private double theta = Double.MAX_VALUE; // theta is the min-value of "upper-bound of CORK" that we need. Branches
+	private double theta = Double.NEGATIVE_INFINITY; // theta is the min-value of "upper-bound of CORK" that we need. Branches
 												// lower than
 	// this value are pruned.
 
@@ -131,20 +132,21 @@ public class gSpan {
 		System.out.println("totalUnlabeled=" + totalUnlabeled);
 		System.out.println("weight are : AWeight=" + AWeight + ", BWeight=" + BWeight + ", UWeight=" + UWeight);
 		
-		if (totalCorrectUses > totalMisuses) {
-			minimalQS = CountingUtils.initialFeatureScore(
-					(int) (totalCorrectUses * 0.3), (int) (totalCorrectUses * 0.7), 
-					(int) (totalMisuses *0.3), (int) (totalMisuses * 0.7), 
-					(int) (totalUnlabeled * 0.3), (int) (totalUnlabeled * 0.7), 
-					AWeight, BWeight, UWeight);
-		} else {
-			minimalQS = CountingUtils.initialFeatureScore(
-					(int) (totalMisuses *0.3), (int) (totalMisuses * 0.7),
-					(int) (totalCorrectUses * 0.3), (int) (totalCorrectUses * 0.7), 
-					(int) (totalUnlabeled * 0.3), (int) (totalUnlabeled * 0.7), 
-					AWeight, BWeight, UWeight);
-		}
-		System.out.println("Worst q_s=" + minimalQS + ". This assumes 70% correspondence between A, B, and U.");
+//		if (totalCorrectUses > totalMisuses) {
+//			minimalQS = CountingUtils.initialFeatureScore(
+//					(int) (totalCorrectUses * 0.5), (int) (totalCorrectUses * 0.5), 
+//					(int) (totalMisuses *0.5), (int) (totalMisuses * 0.5), 
+//					(int) (totalUnlabeled * 0.5), (int) (totalUnlabeled * 0.7), 
+//					AWeight, BWeight, UWeight);
+//		} else {
+//			minimalQS = CountingUtils.initialFeatureScore(
+//					(int) (totalMisuses *0.5), (int) (totalMisuses * 0.5),
+//					(int) (totalCorrectUses * 0.5), (int) (totalCorrectUses * 0.5), 
+//					(int) (totalUnlabeled * 0.5), (int) (totalUnlabeled * 0.5), 
+//					AWeight, BWeight, UWeight);
+//		}
+		minimalQS = Double.NEGATIVE_INFINITY;
+//		System.out.println("Worst q_s=" + minimalQS + ". This assumes 50% correspondence between A, B, and U.");
 		theta = minimalQS;
 
 		runIntern();
@@ -306,8 +308,8 @@ public class gSpan {
 		os.write("t # " + ID + " * " + sup + System.getProperty("line.separator"));
 		g.write(os);
 		
-		System.out.println("--\tdebug:size of subgraph = " + g.size());
-		System.out.println("\t: # of edges= " + g.edge_size);
+//		System.out.println("--\tdebug:size of subgraph = " + g.size());
+//		System.out.println("\t: # of edges= " + g.edge_size);
 
 		return true;
 	}
@@ -371,6 +373,7 @@ public class gSpan {
 			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
 					UWeight);
 			if (upperBound <= theta && selectedSubgraphFeatures.size() >= numberOfFeatures) {
+				System.out.println("\tPruning due to " + upperBound + "<" + theta);
 //				coverage.remove(ID - 1);
 				return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
 						// prune the branch
@@ -502,6 +505,7 @@ public class gSpan {
 		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
 
 		int originalSize = selectedSubgraphFeatures.size();
+		System.out.println("q_s is" + q_s);
 		if (q_s > theta) { 
 //				|| selectedSubgraphFeatures.size() < numberOfFeatures) {
 
@@ -534,7 +538,7 @@ public class gSpan {
 			}
 
 			// set new value of theta, which is the minimal quality value among the selected (so far) subgraphs
-			theta = this.minimalQS;
+			theta = q_s;
 			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
 				theta = Math.min(theta, subgraphEntry.getValue());
 			}

@@ -31,15 +31,11 @@ public class EfficientHistory {
         vertex.clear();
 //        vertex.setSize(graph.size());
 
-        int howDeepDoesEGo = 0;
-        
+
         if (e != null) {
         	ordering.add(e.edge);
             edge.add(e.edge.id);
-            howDeepDoesEGo += 1;
-            if (howDeepDoesEGo >= graph.edge_size * 0.8) {
-            	System.out.println("\t\thowDeepDoesEGo:" + howDeepDoesEGo);
-            }
+  
             
             vertex.add(e.edge.from);
             vertex.add(e.edge.to);
@@ -47,10 +43,7 @@ public class EfficientHistory {
             for (PDFS p = e.prev; p != null; p = p.prev) {
             	ordering.add(p.edge); // this line eats 8% of overall instructions(!)
                 edge.add(p.edge.id);
-                howDeepDoesEGo += 1;
-                if (howDeepDoesEGo >= graph.edge_size * 0.8) {
-                	System.out.println("\t\thowDeepDoesEGo:" + howDeepDoesEGo);
-                }
+      
                 
                 
                 vertex.add(p.edge.from);
