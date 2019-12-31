@@ -56,8 +56,12 @@ public class gSpan {
 	// Do this based on the disproportionality of each count. For example, if we
 	// have few minority class B
 	double AWeight, BWeight, UWeight;
+	
+	public static double skewnessImportance = 30.0;
 
-	int numberOfFeatures = 25;
+	int numberOfFeatures = 50;
+	
+	private final int maxGraphCount = 10; // prevent a single type of graph from domainating the quality landscape
 	
 	// a minimal quality q_s to beat
 	double minimalQS;
@@ -92,6 +96,8 @@ public class gSpan {
 		singleVertexLabel = new TreeMap<>();
 
 	}
+	
+	
 
 	/**
 	 * Run gSpan.
@@ -104,6 +110,9 @@ public class gSpan {
 	 * @throws IOException
 	 */
 	void run(FileReader reader, FileWriter writers, long minSup, long maxNodeNum, long minNodeNum) throws IOException {
+		
+		LoggingUtils.logTimingStatistics();
+		
 		os = writers;
 		ID = 0;
 		this.minSup = minSup;
@@ -125,7 +134,7 @@ public class gSpan {
 			BWeight = 100.0 / totalCorrectUses;
 		}
 
-		UWeight = 50.0 / totalUnlabeled;
+		UWeight = skewnessImportance / totalUnlabeled;
 
 		System.out.println("totalCorrectUses=" + totalCorrectUses);
 		System.out.println("totalMisuses=" + totalMisuses);
@@ -150,6 +159,8 @@ public class gSpan {
 		theta = minimalQS;
 
 		runIntern();
+		
+		LoggingUtils.logTimingStatistics();
 
 	}
 
@@ -165,17 +176,17 @@ public class gSpan {
 			TRANS.add(g);
 			if (g.label == 'M') {
 				misuses.add(Math.toIntExact(id));
-				totalMisuses += g.quantity;
+				totalMisuses += Math.min(g.quantity, maxGraphCount);
 //				totalMisuses += 1;
 			} else if (g.label == 'C') {
 				correctUses.add(Math.toIntExact(id));
-				totalCorrectUses += g.quantity;
+				totalCorrectUses += Math.min(g.quantity, maxGraphCount);
 //				totalCorrectUses += 1;
 			} else if (g.label == 'U') {
-				totalUnlabeled += g.quantity;
+				totalUnlabeled += Math.min(g.quantity, maxGraphCount);
 //				totalUnlabeled += 1;
 			} else {
-				throw new RuntimeException("huh? label seems to be " + g.label + ", at id=" + id);
+				throw new RuntimeException("huh? label (which should be 'M', 'C' or 'U') seems to be " + g.label + ", at id=" + id);
 			}
 
 			id++;
@@ -505,7 +516,7 @@ public class gSpan {
 		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
 
 		int originalSize = selectedSubgraphFeatures.size();
-		System.out.println("q_s is" + q_s);
+		System.out.println("\t\tq_s is " + q_s);
 		if (q_s > theta) { 
 //				|| selectedSubgraphFeatures.size() < numberOfFeatures) {
 

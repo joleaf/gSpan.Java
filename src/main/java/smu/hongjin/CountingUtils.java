@@ -15,50 +15,75 @@ import io.github.tonyzzx.gspan.gSpan;
 
 public class CountingUtils {
 
+//	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, double AWeight,
+//			double BWeight, double UWeight) {
+//		// first component: from original CORK paper
+//		// ("Near-optimal supervised feature selection among frequent subgraphs" by
+//		// Thoma et al.)
+//		// SIAM International Conference on Data Mining. 2009
+//		// SIAM is a rank A conference.
+//		double correspondanceBetweenLabels = -1 * (AWeight * A_S0 * BWeight * B_S0 + AWeight * A_S1 * BWeight * B_S1);
+//
+//		// second component: incentize skewedness. The more the unlabeled data shifts to
+//		// the majority class, the better
+//		// i.e. incentize correspondense between U and A
+//		double skewedness = UWeight * U_S1 * AWeight * A_S1;
+//		
+//		// some U and many of B
+//		skewedness += UWeight * U_S0 * BWeight * B_S1;
+//		
+//		// third component: penalty for unlabeled data that is still unlabeled;
+////		double lackOfLabels = -1 * UWeight * U_S0 * UWeight * U_S0;		// 
+//
+//		return correspondanceBetweenLabels; // + skewedness;
+//		
+//		// a feature is good w.r.t. to the misuse distribution if
+//		// 		1. unlabeled distribution is skewed
+//		// 		2.  
+//	}
+	
 	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, double AWeight,
 			double BWeight, double UWeight) {
-		// first component: from original CORK paper
-		// ("Near-optimal supervised feature selection among frequent subgraphs" by
-		// Thoma et al.)
-		// SIAM International Conference on Data Mining. 2009
-		// SIAM is a rank A conference.
-		double correspondanceBetweenLabels = -1 * (AWeight * A_S0 * BWeight * B_S0 + AWeight * A_S1 * BWeight * B_S1);
-
-		// second component: incentize skewedness. The more the unlabeled data shifts to
-		// the majority class, the better
-		// i.e. incentize correspondense between U and A
-		double skewedness = UWeight * U_S1 * AWeight * A_S1;
 		
-		// some U and many of B
-		skewedness += UWeight * U_S0 * BWeight * B_S1;
-		
-		// third component: penalty for unlabeled data that is still unlabeled;
-//		double lackOfLabels = -1 * UWeight * U_S0 * UWeight * U_S0;		// 
-
-		return correspondanceBetweenLabels; // + skewedness;
-		
-		// a feature is good w.r.t. to the misuse distribution if
-		// 		1. unlabeled distribution is skewed
-		// 		2.  
+		System.out.println("==debug==");
+		System.out.print("\t\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
+		System.out.println(" , second component=" + Math.abs(gSpan.skewnessImportance / 2 - UWeight *  U_S1));
+		return Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
+				+ Math.abs(gSpan.skewnessImportance / 2  - UWeight *  U_S1)  // [0..skewnessImportance/2]
+				;
 	}
 
+//	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,  double AWeight,
+//			double BWeight, double UWeight) {
+//		// first component upper bound: from original CORK paper
+//		// "Near-optimal supervised feature selection among frequent subgraphs" by Thoma
+//		// et al.
+//		double maxCorrespondanceIncrease = Math.max(
+//				Math.max(
+//						AWeight * A_S1 * (BWeight * (B_S1 - B_S0)), BWeight * B_S1 * (AWeight * (A_S1 - A_S0))), 0);
+//
+//		// second component upper bound: 
+//		// both U_S1 and A_S1 cannot increase
+//		// but the penalty for U and B can decrease.
+//		// U_S0 can increase, although B_S1 cannot. Thus, the best case is that all of U_S1 becomes U_S0
+//		double maxSkewIncrease = 0 ;// UWeight * (U_S1) * BWeight * B_S1;
+//				
+//
+//		return q_s + maxCorrespondanceIncrease + maxSkewIncrease;
+//	}
+	
 	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,  double AWeight,
 			double BWeight, double UWeight) {
-		// first component upper bound: from original CORK paper
-		// "Near-optimal supervised feature selection among frequent subgraphs" by Thoma
-		// et al.
-		double maxCorrespondanceIncrease = Math.max(
-				Math.max(
-						AWeight * A_S1 * (BWeight * (B_S1 - B_S0)), BWeight * B_S1 * (AWeight * (A_S1 - A_S0))), 0);
-
-		// second component upper bound: 
-		// both U_S1 and A_S1 cannot increase
-		// but the penalty for U and B can decrease.
-		// U_S0 can increase, although B_S1 cannot. Thus, the best case is that all of U_S1 becomes U_S0
-		double maxSkewIncrease = 0 ;// UWeight * (U_S1) * BWeight * B_S1;
-				
-
-		return q_s + maxCorrespondanceIncrease + maxSkewIncrease;
+		// best case: 	all of one class shifts to 0
+		// 		either 	all of A_S1 becomes 0
+		//		or 	  	all of B_S1 becomes 0
+		double maxIncrease =  Math.max(BWeight * B_S1, AWeight * A_S1);
+		// unfortunately, skewness can increase a lot...
+		// 	either: reach 0 or max skewnessImportance
+		double currentSkew = Math.abs(gSpan.skewnessImportance / 2 - UWeight *  U_S1);
+		double skewnessIncrease = Math.min(currentSkew - 0, gSpan.skewnessImportance - currentSkew);
+		
+		return q_s + maxIncrease + skewnessIncrease;
 	}
 
 	// actually we don't have to do this for all subgraphs.
