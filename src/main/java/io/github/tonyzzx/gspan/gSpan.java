@@ -59,7 +59,7 @@ public class gSpan {
 	
 	public static double skewnessImportance = 30.0;
 
-	int numberOfFeatures = 50;
+	int numberOfFeatures = 15;
 	
 	private final int maxGraphCount = 10; // prevent a single type of graph from domainating the quality landscape
 	
@@ -420,7 +420,7 @@ public class gSpan {
 		ArrayList<Edge> edges = new ArrayList<>();
 
 		// Enumerate all possible one edge extensions of the current substructure.
-		System.out.println("\titerating over projected which is len= " + projected.size());
+//		System.out.println("\titerating over projected which is len= " + projected.size());
 		for (PDFS aProjected : projected) {
 
 			int id = aProjected.id;
