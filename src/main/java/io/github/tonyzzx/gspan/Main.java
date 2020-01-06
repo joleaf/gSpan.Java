@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 
 public class Main {
     public static void main(String[] args) throws IOException {
@@ -38,6 +39,19 @@ public class Main {
         			CountingUtils.writeGraphFeatures(gSpan, gSpan.coverage, featuresWriter);
         		}
             	System.out.println("The feature vectors of labeled graphs are in " + arguments.outFilePath + "_features.txt");
+            	
+            	System.out.println("Computing which unlabeled graphs were not covered");
+            	for (Long feature : gSpan.selectedSubgraphFeatures.keySet()) {
+            		Set<Integer> coveredGraphs = gSpan.unlabeledCoverage.get(feature);
+            		gSpan.uncoveredUnlabeledGraphs.removeAll(coveredGraphs);	
+            	}
+            	try(BufferedWriter uncoveredWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_uncovered.txt" ))) {
+        			for (Integer uncovered : gSpan.uncoveredUnlabeledGraphs) {
+        				uncoveredWriter.write(uncovered + "\n");
+        			}
+        		}
+            	
+            	System.out.println("The uncovered files are in " + arguments.outFilePath + "_uncovered.txt");
             }
         }
 		

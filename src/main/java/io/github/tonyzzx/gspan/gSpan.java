@@ -28,6 +28,8 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
 
+import org.mskcc.cbio.portal.stats.FisherExact;
+
 public class gSpan {
 	private ArrayList<Graph> TRANS;
 	private DFSCode DFS_CODE;
@@ -56,13 +58,13 @@ public class gSpan {
 	// Do this based on the disproportionality of each count. For example, if we
 	// have few minority class B
 	double AWeight, BWeight, UWeight;
-	
-	public static double skewnessImportance = 30.0;
 
-	int numberOfFeatures = 15;
-	
-	private final int maxGraphCount = 10; // prevent a single type of graph from domainating the quality landscape
-	
+	public static double skewnessImportance = 20.0;
+
+	int numberOfFeatures = 256;
+
+	private final int maxGraphCount = 5; // prevent a single type of graph from domainating the quality landscape
+
 	// a minimal quality q_s to beat
 	double minimalQS;
 
@@ -71,20 +73,30 @@ public class gSpan {
 	// currently selected set of subgraph features
 	// There is no efficient way to enumerate them all
 	public Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
-//	public Long 
+
+	// uncoveredGraphs are the graphs that we need a human to label more of.
+	public Set<Integer> uncoveredUnlabeledGraphs = new HashSet<>();
 
 	public Set<Integer> misuses = new HashSet<>();
 	public Set<Integer> correctUses = new HashSet<>();
+	public Map<Integer, Integer> quantities = new HashMap<>();
 
-	private double theta = Double.NEGATIVE_INFINITY; // theta is the min-value of "upper-bound of CORK" that we need. Branches
-												// lower than
-	// this value are pruned.
+	private double theta = 0.0;
+	// theta is the min-value of "upper-bound of CORK" that we need. Branches with upper bound
+	// lower than this value are pruned.
 
-	enum GRAPH_LABEL {
+	public enum GRAPH_LABEL {
 		MISUSE, CORRECT_USE, UNLABELED
 	}
 
+	// coverage only tracks coverage of C and M
 	public Map<Long, Set<Integer>> coverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
+	// unlabeledCoverage tracks coverage of U
+	public Map<Long, Set<Integer>> unlabeledCoverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
+
+	// debug
+	public static int wouldBeAcceptedWithoutSemiSupervisedFilters = 0;
+	public static int wouldNotBePrunedWithoutSemiSupervisedFilters = 0;
 
 	public gSpan() {
 		TRANS = new ArrayList<>();
@@ -96,8 +108,6 @@ public class gSpan {
 		singleVertexLabel = new TreeMap<>();
 
 	}
-	
-	
 
 	/**
 	 * Run gSpan.
@@ -110,9 +120,9 @@ public class gSpan {
 	 * @throws IOException
 	 */
 	void run(FileReader reader, FileWriter writers, long minSup, long maxNodeNum, long minNodeNum) throws IOException {
-		
+
 		LoggingUtils.logTimingStatistics();
-		
+
 		os = writers;
 		ID = 0;
 		this.minSup = minSup;
@@ -140,26 +150,12 @@ public class gSpan {
 		System.out.println("totalMisuses=" + totalMisuses);
 		System.out.println("totalUnlabeled=" + totalUnlabeled);
 		System.out.println("weight are : AWeight=" + AWeight + ", BWeight=" + BWeight + ", UWeight=" + UWeight);
-		
-//		if (totalCorrectUses > totalMisuses) {
-//			minimalQS = CountingUtils.initialFeatureScore(
-//					(int) (totalCorrectUses * 0.5), (int) (totalCorrectUses * 0.5), 
-//					(int) (totalMisuses *0.5), (int) (totalMisuses * 0.5), 
-//					(int) (totalUnlabeled * 0.5), (int) (totalUnlabeled * 0.7), 
-//					AWeight, BWeight, UWeight);
-//		} else {
-//			minimalQS = CountingUtils.initialFeatureScore(
-//					(int) (totalMisuses *0.5), (int) (totalMisuses * 0.5),
-//					(int) (totalCorrectUses * 0.5), (int) (totalCorrectUses * 0.5), 
-//					(int) (totalUnlabeled * 0.5), (int) (totalUnlabeled * 0.5), 
-//					AWeight, BWeight, UWeight);
-//		}
-		minimalQS = Double.NEGATIVE_INFINITY;
-//		System.out.println("Worst q_s=" + minimalQS + ". This assumes 50% correspondence between A, B, and U.");
+
+		minimalQS = 0.0;
 		theta = minimalQS;
 
 		runIntern();
-		
+
 		LoggingUtils.logTimingStatistics();
 
 	}
@@ -177,16 +173,22 @@ public class gSpan {
 			if (g.label == 'M') {
 				misuses.add(Math.toIntExact(id));
 				totalMisuses += Math.min(g.quantity, maxGraphCount);
+				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
 //				totalMisuses += 1;
 			} else if (g.label == 'C') {
 				correctUses.add(Math.toIntExact(id));
 				totalCorrectUses += Math.min(g.quantity, maxGraphCount);
+				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
 //				totalCorrectUses += 1;
 			} else if (g.label == 'U') {
 				totalUnlabeled += Math.min(g.quantity, maxGraphCount);
 //				totalUnlabeled += 1;
+				
+				uncoveredUnlabeledGraphs.add(Math.toIntExact(id)); // first, we add all unlabeled data to uncoveredUnlabeledGraphs
+				// at the end of the mining process, we will go through it and remove covered graphs 
 			} else {
-				throw new RuntimeException("huh? label (which should be 'M', 'C' or 'U') seems to be " + g.label + ", at id=" + id);
+				throw new RuntimeException(
+						"huh? label (which should be 'M', 'C' or 'U') seems to be " + g.label + ", at id=" + id);
 			}
 
 			id++;
@@ -318,7 +320,7 @@ public class gSpan {
 		DFS_CODE.toGraph(g);
 		os.write("t # " + ID + " * " + sup + System.getProperty("line.separator"));
 		g.write(os);
-		
+
 //		System.out.println("--\tdebug:size of subgraph = " + g.size());
 //		System.out.println("\t: # of edges= " + g.edge_size);
 
@@ -353,11 +355,14 @@ public class gSpan {
 		// Output the frequent substructure
 		boolean isReported = report(sup);
 
-		if (isReported) {	// isReported == true means that its a frequent subgraph.
+		if (isReported) { // isReported == true means that its a frequent subgraph.
 
-			// if it's a valid frequent subgraph, then check if its a valid significant subgraph
-			
+			// if it's a valid frequent subgraph, then check if its a valid significant
+			// subgraph
+
 			int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
+			Set<Integer> AGraphs;
+			Set<Integer> BGraphs;
 			if (totalCorrectUses > totalMisuses) {
 				LoggingUtils.logOnce("Majority class is correct usage");
 				// correct uses are the majority case, so A is the "Correct use" (C) label
@@ -367,6 +372,8 @@ public class gSpan {
 				B_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
 				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
+				AGraphs = correctUses;
+				BGraphs = misuses;
 			} else {
 				LoggingUtils.logOnce("Majority class is misuse");
 				// misuses are the majority case, so A is the "Misuse" (M) label
@@ -376,21 +383,54 @@ public class gSpan {
 				B_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
 				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
+				AGraphs = misuses;
+				BGraphs = correctUses;
 			}
-			double q_s = computeQuality(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
 
-			++ID; // must increase since this ID was used for `report`
+			Set<Integer> alreadyCoveredA = new HashSet<>();
+			Set<Integer> alreadyCoveredB = new HashSet<>();
+			for (Long selectedSubgraphFeature : selectedSubgraphFeatures.keySet()) {
+				Set<Integer> covered = coverage.get(selectedSubgraphFeature);
+				for (int coveredGraph : covered) {
+					if (AGraphs.contains(coveredGraph)) {
+						alreadyCoveredA.add(coveredGraph);
+					} else if (BGraphs.contains(coveredGraph)) {
+						alreadyCoveredB.add(coveredGraph);
+					}
+				}
+			}
+
+			Set<Integer> newlyCoveredA = new HashSet<>();
+			Set<Integer> newlyCoveredB = new HashSet<>();
+			for (Integer newlyCovered : coverage.get(ID)) {
+				if (AGraphs.contains(newlyCovered)) {
+					newlyCoveredA.add(newlyCovered);
+				} else if (BGraphs.contains(newlyCovered)) {
+					newlyCoveredB.add(newlyCovered);
+				}
+			}
+
+			newlyCoveredA.removeAll(alreadyCoveredA);
+			newlyCoveredB.removeAll(alreadyCoveredB);
+
+			int A_N = newlyCoveredA.size();
+			int B_N = newlyCoveredB.size();
+
+			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, A_N, B_N);
+
+			++ID; // must increase since this ID was used for `report` and is included in the
+					// subgraphs output
 
 			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
 					UWeight);
-			if (upperBound <= theta && selectedSubgraphFeatures.size() >= numberOfFeatures) {
-				System.out.println("\tPruning due to " + upperBound + "<" + theta);
+			if (q_s <= -0.99 || upperBound <= theta) {
+				System.out.println("\tPruning");
 //				coverage.remove(ID - 1);
 				return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
 						// prune the branch
 			}
 		} else {
-			coverage.remove(ID); // ID didn't get reported, it may be reused for another subgraph 
+			coverage.remove(ID); // ID didn't get reported, it may be reused for another subgraph
 		}
 
 		/*
@@ -402,9 +442,9 @@ public class gSpan {
 			coverage.remove(ID); // ID didn't get reported, it may be reused for another subgraph
 			return;
 		}
-		
+
 		if (DFS_CODE.countNode() == maxPat_max) {
-			return; 
+			return;
 		}
 
 		/*
@@ -432,9 +472,8 @@ public class gSpan {
 			for (int i = rmPath.size() - 1; i >= 1; --i) {
 				// HJ notes: rmPath.get(0) must be the right-most vertex
 				// see paper; only the right-most vertex can be extended with backwards edge.
-				Edge e = Misc.getBackward(TRANS.get(id), history.ordering.get(rmPath.get(i)), history.ordering.get(rmPath.get(0)),
-						history, 
-						singleVertexLabel, minSup);
+				Edge e = Misc.getBackward(TRANS.get(id), history.ordering.get(rmPath.get(i)),
+						history.ordering.get(rmPath.get(0)), history, singleVertexLabel, minSup);
 				if (e != null) {
 					int key_1 = DFS_CODE.get(rmPath.get(i)).from;
 					NavigableMap<Integer, Projected> root_1 = new_bck_root.computeIfAbsent(key_1, k -> new TreeMap<>());
@@ -454,7 +493,7 @@ public class gSpan {
 			//
 			// The problem is:
 			// history[rmPath[0]].to > TRANS[id].size()
-			if (Misc.getForwardPure(TRANS.get(id), history.ordering.get(rmPath.get(0)), minLabel, history, edges, 
+			if (Misc.getForwardPure(TRANS.get(id), history.ordering.get(rmPath.get(0)), minLabel, history, edges,
 					singleVertexLabel, minSup))
 				for (Edge it : edges) {
 					NavigableMap<Integer, NavigableMap<Integer, Projected>> root_1 = new_fwd_root
@@ -471,8 +510,8 @@ public class gSpan {
 				}
 			// backtracked forward
 			for (Integer aRmPath : rmPath)
-				if (Misc.getForwardRmPath(TRANS.get(id), history.ordering.get(aRmPath), minLabel, history, edges
-						, singleVertexLabel, minSup))
+				if (Misc.getForwardRmPath(TRANS.get(id), history.ordering.get(aRmPath), minLabel, history, edges,
+						singleVertexLabel, minSup))
 					for (Edge it : edges) {
 						int key_1 = DFS_CODE.get(aRmPath).from;
 						NavigableMap<Integer, NavigableMap<Integer, Projected>> root_1 = new_fwd_root
@@ -512,13 +551,40 @@ public class gSpan {
 		}
 	}
 
-	private double computeQuality(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
-		double q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight, UWeight);
-
+	private double computeQualityTODetermineIfSignificant(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,
+			int A_N, int B_N) {
 		int originalSize = selectedSubgraphFeatures.size();
-		System.out.println("\t\tq_s is " + q_s);
-		if (q_s > theta) { 
-//				|| selectedSubgraphFeatures.size() < numberOfFeatures) {
+
+		boolean isRelevant = true;
+		// 1st filter: early return if obviously not useful
+		if (A_S1 == 0 && B_S1 == 0) {
+			// early reject.
+			// but this indicates that there are subgraphs in U that cannot be labeled
+//			System.out.println("\tearly reject due to absense in labeled sets. ID=" + ID);
+			isRelevant = false;
+		}
+		// 2nd filter: statistical test for significance
+		if (isRelevant) {
+			FisherExact fisherExact = new FisherExact(totalCorrectUses + totalMisuses);
+			double pValue = fisherExact.getTwoTailedP(A_S1, A_S0, B_S1, B_S0);
+			if (pValue > 0.10) {
+				isRelevant = false;
+				System.out.println("\t\t skipping due to insignificant p value");
+				System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+			}
+		}
+
+		double q_s = -1;
+		// 3nd filter
+		if (isRelevant) {
+			q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, A_N, B_N, AWeight, BWeight,
+					UWeight, ID);
+
+			System.out.println("\t\tq_s is " + q_s);
+			isRelevant = q_s > theta;
+		}
+
+		if (isRelevant) {
 
 			// if adding the new feature will cause this to be bigger
 			if (selectedSubgraphFeatures.size() == numberOfFeatures) {
@@ -542,17 +608,19 @@ public class gSpan {
 					throw new RuntimeException("missing toDrop in coverage=" + toDrop);
 				}
 				coverage.remove(toDrop);
-			
+
 				if (!(selectedSubgraphFeatures.size() == numberOfFeatures - 1)) {
 					throw new RuntimeException("Unexpected size");
 				}
 			}
 
-			// set new value of theta, which is the minimal quality value among the selected (so far) subgraphs
-			theta = q_s;
-			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
-				theta = Math.min(theta, subgraphEntry.getValue());
-			}
+			// set new value of theta, which is the minimal quality value among the selected
+			// (so far) subgraphs
+//			theta = q_s;
+//			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
+//				theta = Math.min(theta, subgraphEntry.getValue());
+//			}
+			// theta is still equals to 0. we want all the good subgraphs.
 
 			if (selectedSubgraphFeatures.containsKey(ID)) {
 				throw new RuntimeException("iterating into the same subgraph ID again! " + ID);
@@ -564,7 +632,7 @@ public class gSpan {
 				System.out.println("Just inserted " + ID);
 				System.out.println("selectedSubgraphFeatures.size()= " + selectedSubgraphFeatures.size());
 				System.out.println("coverage.size()= " + coverage.size());
-				
+
 				Set<Long> missing = selectedSubgraphFeatures.keySet();
 				missing.removeAll(coverage.keySet());
 				System.out.println("missing= " + missing);
@@ -572,12 +640,13 @@ public class gSpan {
 				throw new RuntimeException("Unexpected coverage vs selectedSubgraphFeatures size");
 			}
 
-			
 			System.out.println("\t..: ID=" + ID + " , q_s=" + q_s);
-			System.out.print("\t.. A_S0=" + A_S0 + " , A_S1=" + A_S1);
-			System.out.println("\t.. " + "B_S0=" + B_S0 + " , B_S1=" + B_S1 + " ,..  U_S0=" + U_S0 + " , U_S1=" + U_S1);
+			System.out.print("\t.... A_S0=" + A_S0 + " , A_S1=" + A_S1);
+			System.out
+					.println("\t.... " + "B_S0=" + B_S0 + " , B_S1=" + B_S1 + " ,..  U_S0=" + U_S0 + " , U_S1=" + U_S1);
+			System.out.println("=");
 		} else {
-			// not interesting enoguh. No need to keep coverage info
+			// not interesting enough. No need to keep coverage info
 			coverage.remove(ID);
 		}
 
@@ -612,37 +681,38 @@ public class gSpan {
 					throw new RuntimeException("invalid label!");
 				}
 				coverage.putIfAbsent(ID, new HashSet<>());
+				unlabeledCoverage.putIfAbsent(ID, new HashSet<>());
 
 				if (isMisuse) {
-					countsOfLabels.put(GRAPH_LABEL.MISUSE, 
-							countsOfLabels.get(GRAPH_LABEL.MISUSE) 
+					countsOfLabels.put(GRAPH_LABEL.MISUSE, countsOfLabels.get(GRAPH_LABEL.MISUSE)
 //							+ 1); 
-					 + TRANS.get(cur.id).quantity);
-					
+							+ Math.min(TRANS.get(cur.id).quantity, maxGraphCount));
+
 					if (countsOfLabels.get(GRAPH_LABEL.MISUSE) > totalMisuses) {
 						throw new RuntimeException("invalid MISUSE counts");
 					}
-						
+
 //					System.out.println("putting into coverage=" + ID);
 					coverage.get(ID).add(cur.id);
 				} else if (isCorrectUse) {
-					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) 
+					countsOfLabels.put(GRAPH_LABEL.CORRECT_USE, countsOfLabels.get(GRAPH_LABEL.CORRECT_USE)
 //							+ 1); 
-					 + TRANS.get(cur.id).quantity);
+							+ Math.min(TRANS.get(cur.id).quantity, maxGraphCount));
 //					System.out.println("putting into coverage=" + ID);
 					if (countsOfLabels.get(GRAPH_LABEL.CORRECT_USE) > totalCorrectUses) {
 						throw new RuntimeException("invalid CORRECT_USE counts");
 					}
-					
+
 					coverage.get(ID).add(cur.id);
 				} else { // unlabeled
 					countsOfLabels.put(GRAPH_LABEL.UNLABELED, countsOfLabels.get(GRAPH_LABEL.UNLABELED) +
 //							1);
-					 TRANS.get(cur.id).quantity);
-					
+							Math.min(TRANS.get(cur.id).quantity, maxGraphCount));
+
 					if (countsOfLabels.get(GRAPH_LABEL.UNLABELED) > totalUnlabeled) {
 						throw new RuntimeException("invalid UNLABELED counts");
 					}
+					unlabeledCoverage.get(ID).add(cur.id);
 				}
 
 			}
@@ -706,11 +776,12 @@ public class gSpan {
 
 			for (int i = rmPath.size() - 1; !flg && i >= 1; --i) {
 				for (PDFS cur : projected) {
-					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur); // history allows us to easily determine if a
-																		// vertex or edge is already part of the
-																		// projected graph
-					Edge e = Misc.getBackward(GRAPH_IS_MIN, history.ordering.get(rmPath.get(i)), history.ordering.get(rmPath.get(0)),
-							history, singleVertexLabel, minSup);
+					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur); // history allows us to easily
+																						// determine if a
+					// vertex or edge is already part of the
+					// projected graph
+					Edge e = Misc.getBackward(GRAPH_IS_MIN, history.ordering.get(rmPath.get(i)),
+							history.ordering.get(rmPath.get(0)), history, singleVertexLabel, minSup);
 					if (e != null) {
 						int key_1 = e.eLabel;
 						Projected root_1 = root.get(key_1);
@@ -742,7 +813,8 @@ public class gSpan {
 
 			for (PDFS cur : projected) {
 				EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur);
-				if (Misc.getForwardPure(GRAPH_IS_MIN, history.ordering.get(rmPath.get(0)), minLabel, history, edges, singleVertexLabel, minSup)) {
+				if (Misc.getForwardPure(GRAPH_IS_MIN, history.ordering.get(rmPath.get(0)), minLabel, history, edges,
+						singleVertexLabel, minSup)) {
 					flg = true;
 					newFrom = maxToc;
 					for (Edge it : edges) {
@@ -762,7 +834,8 @@ public class gSpan {
 			for (int i = 0; !flg && i < rmPath.size(); ++i) {
 				for (PDFS cur : projected) {
 					EfficientHistory history = new EfficientHistory(GRAPH_IS_MIN, cur);
-					if (Misc.getForwardRmPath(GRAPH_IS_MIN, history.ordering.get(rmPath.get(i)), minLabel, history, edges, singleVertexLabel, minSup)) {
+					if (Misc.getForwardRmPath(GRAPH_IS_MIN, history.ordering.get(rmPath.get(i)), minLabel, history,
+							edges, singleVertexLabel, minSup)) {
 						flg = true;
 						newFrom = DFS_CODE_IS_MIN.get(rmPath.get(i)).from;
 						for (Edge it : edges) {

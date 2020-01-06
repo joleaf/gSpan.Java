@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -12,6 +13,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import io.github.tonyzzx.gspan.gSpan;
+import io.github.tonyzzx.gspan.gSpan.GRAPH_LABEL;
 
 public class CountingUtils {
 
@@ -41,16 +43,89 @@ public class CountingUtils {
 //		// 		1. unlabeled distribution is skewed
 //		// 		2.  
 //	}
-	
-	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, double AWeight,
-			double BWeight, double UWeight) {
-		
-		System.out.println("==debug==");
-		System.out.print("\t\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
-		System.out.println(" , second component=" + Math.abs(gSpan.skewnessImportance / 2 - UWeight *  U_S1));
-		return Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
-				+ Math.abs(gSpan.skewnessImportance / 2  - UWeight *  U_S1)  // [0..skewnessImportance/2]
-				;
+
+	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, int A_N,
+			int B_N, double AWeight, double BWeight, double UWeight, long ID) {
+
+		System.out.println("\t==debug==");
+		System.out.print("\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
+//		System.out.println(" , second component=" + Math.abs(gSpan.skewnessImportance / 2 - UWeight *  U_S1));
+
+		double expectedRatio = AWeight / (AWeight + BWeight);
+		LoggingUtils.logOnce("\t\t\t, expectedRatio=" + expectedRatio);
+		System.out.println(
+				"\t\t, second component=" + Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1));
+
+//		double novelty = AWeight * A_N + BWeight * B_N; // HJ: todo; actually this doesn't make any sense
+		// because the first feature added will be overrated!
+		// and during subgraph-lengthening, S subgraph of T; S will score higher than T
+		// even if T is good.
+
+		double score = Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
+				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1) // [0..skewnessImportance/2]
+//				 + novelty
+		;
+		if (Math.abs(AWeight * A_S1 - BWeight * B_S1) > 0 && score <= 0) {
+			gSpan.wouldNotBePrunedWithoutSemiSupervisedFilters += 1;
+			System.out.println("\t\t" + ID +" would be accepted if not for the distribution penalty!");
+			System.out.println("\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+		}
+
+		return score;
+	}
+
+	public static double skewnessScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, int A_N, int B_N,
+			double AWeight, double BWeight, double UWeight) {
+		double expectedRatio = AWeight / (AWeight + BWeight);
+		System.out.println("\t\t, expectedRatio=" + expectedRatio);
+		System.out.println(
+				"\t\t, second component=" + Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1));
+		return -Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1);
+	}
+
+	public static double improvementCombinedFeatureScore(Set<Integer> combinedACoverage, Set<Integer> combinedBCoverage,
+			Set<Integer> combinedUCoverage, Set<Integer> newFeatureACoverage, Set<Integer> newFeatureBCoverage,
+			Set<Integer> newFeatureUCoverage, int totalA, int totalB, int totalU, double AWeight, double BWeight,
+			double UWeight) {
+
+		int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
+
+		A_S0 = totalA - combinedACoverage.size();
+		A_S1 = combinedACoverage.size();
+		B_S0 = totalB - combinedBCoverage.size();
+		B_S1 = combinedBCoverage.size();
+		U_S0 = totalU - combinedUCoverage.size();
+		U_S1 = combinedUCoverage.size();
+
+		Set<Integer> newACoverage = new HashSet<>(combinedACoverage);
+		newACoverage.addAll(newFeatureACoverage);
+
+		Set<Integer> newBCoverage = new HashSet<>(combinedBCoverage);
+		newBCoverage.addAll(newFeatureBCoverage);
+
+		Set<Integer> newUCoverage = new HashSet<>(combinedUCoverage);
+		newUCoverage.addAll(newFeatureUCoverage);
+
+		int new_A_S0, new_B_S0, new_U_S0, new_A_S1, new_B_S1, new_U_S1;
+
+		new_A_S0 = totalA - newACoverage.size();
+		new_A_S1 = newACoverage.size();
+		new_B_S0 = totalB - newBCoverage.size();
+		new_B_S1 = newBCoverage.size();
+		new_U_S0 = totalU - newUCoverage.size();
+		new_U_S1 = newUCoverage.size();
+
+		double expectedRatio = AWeight / (AWeight + BWeight);
+
+		double originalQuality = Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
+				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1) // [0..skewnessImportance/2];
+		;
+		double newQuality = Math.abs(AWeight * new_A_S1 - BWeight * new_B_S1) // difference bet. percentages [0..100]
+				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * new_U_S1) // [0..skewnessImportance/2];
+		;
+
+		return newQuality - originalQuality;
+
 	}
 
 //	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,  double AWeight,
@@ -71,19 +146,22 @@ public class CountingUtils {
 //
 //		return q_s + maxCorrespondanceIncrease + maxSkewIncrease;
 //	}
-	
-	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,  double AWeight,
-			double BWeight, double UWeight) {
-		// best case: 	all of one class shifts to 0
-		// 		either 	all of A_S1 becomes 0
-		//		or 	  	all of B_S1 becomes 0
-		double maxIncrease =  Math.max(BWeight * B_S1, AWeight * A_S1);
+
+	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,
+			double AWeight, double BWeight, double UWeight) {
+		// best case: all of one class shifts to 0
+		// either all of A_S1 becomes 0
+		// or all of B_S1 becomes 0
+		double maxIncrease = Math.max(BWeight * B_S1, AWeight * A_S1);
 		// unfortunately, skewness can increase a lot...
-		// 	either: reach 0 or max skewnessImportance
-		double currentSkew = Math.abs(gSpan.skewnessImportance / 2 - UWeight *  U_S1);
-		double skewnessIncrease = Math.min(currentSkew - 0, gSpan.skewnessImportance - currentSkew);
-		
-		return q_s + maxIncrease + skewnessIncrease;
+		// either: reach 0 or max skewnessImportance
+
+		double expectedRatio = AWeight / (AWeight + BWeight);
+
+		double currentSkew = Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1);
+//		double skewnessIncrease = Math.min(currentSkew - 0, gSpan.skewnessImportance - currentSkew);
+
+		return q_s + maxIncrease + currentSkew;
 	}
 
 	// actually we don't have to do this for all subgraphs.
@@ -230,13 +308,14 @@ public class CountingUtils {
 		return result;
 	}
 
-	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, BufferedWriter writer) throws IOException {
+	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, BufferedWriter writer)
+			throws IOException {
 		System.out.println("\tConsolidating and writing graph and their subgraph features");
-		
+
 		if (coverage.size() != gSpan.selectedSubgraphFeatures.size()) {
 			throw new RuntimeException("wrong size!");
 		}
-		
+
 		List<Integer> graphs = new ArrayList<>();
 		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
 			graphs.addAll(entry.getValue());
@@ -248,27 +327,30 @@ public class CountingUtils {
 			writer.write(",feature_" + feature);
 		}
 		writer.write("\n");
-		
+
 		// <graph id>, feature_1, feature_2, feature_3, ... \n
 		for (Integer graph : graphs) {
-			writer.write(graph + ",");
-			
-			if (gSpan.correctUses.contains(graph)) {
-				writer.write("1");
-			} else if (gSpan.misuses.contains(graph)) {
-				writer.write("0");
-			} else {
-				throw new RuntimeException("graph label is incorrect somehow " + graph);
-			}
-			
-			for (Long feature : features) {
-				if (coverage.get(feature).contains(graph)) {
-					writer.write(",1");
+			for (int graphNum = 0; graphNum < gSpan.quantities.get(graph); graphNum++) {
+
+				writer.write(graph+ "_" +graphNum + ",");
+
+				if (gSpan.correctUses.contains(graph)) {
+					writer.write("1");
+				} else if (gSpan.misuses.contains(graph)) {
+					writer.write("0");
 				} else {
-					writer.write(",0");
+					throw new RuntimeException("graph label is incorrect somehow " + graph);
 				}
+
+				for (Long feature : features) {
+					if (coverage.get(feature).contains(graph)) {
+						writer.write(",1");
+					} else {
+						writer.write(",0");
+					}
+				}
+				writer.write("\n");
 			}
-			writer.write("\n");
 		}
 
 		System.out.println("\tCompleted consolidation and writing");
