@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -74,13 +75,17 @@ public class gSpan {
 	// There is no efficient way to enumerate them all
 	public Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
 
-	// uncoveredGraphs are the graphs that we need a human to label more of.
-	public Set<Integer> uncoveredUnlabeledGraphs = new HashSet<>();
+
 
 	public Set<Integer> misuses = new HashSet<>();
 	public Set<Integer> correctUses = new HashSet<>();
 	public Map<Integer, Integer> quantities = new HashMap<>();
 
+	
+	// uncoveredGraphs are the graphs that we need a human to label more of.
+	public Set<Integer> uncoveredUnlabeledGraphs = new HashSet<>();
+	public Map<Integer, Integer> usefulUnlabelledGraphs = new HashMap<>();
+	
 	private double theta = 0.0;
 	// theta is the min-value of "upper-bound of CORK" that we need. Branches with upper bound
 	// lower than this value are pruned.
@@ -154,6 +159,45 @@ public class gSpan {
 		minimalQS = 0.0;
 		theta = minimalQS;
 
+		runIntern();
+
+		LoggingUtils.logTimingStatistics();
+
+	}
+	
+	/**
+	 * Run gSpan. The secondary interface
+	 *
+	 * @param writers    FileWriter
+	 * @param minSup     Minimum support
+	 * @param maxNodeNum Maximum number of nodes
+	 * @param minNodeNum Minimum number of nodes
+	 * @throws IOException
+	 */
+	void runIgnoringLabels(ArrayList<Graph> TRANS, FileWriter writers, long minSup, long maxNodeNum, long minNodeNum) throws IOException {
+
+		LoggingUtils.logTimingStatistics();
+
+		os = writers;
+		ID = 0;
+		this.minSup = minSup;
+		maxPat_min = minNodeNum;
+		maxPat_max = maxNodeNum;
+		directed = true;
+
+		this.TRANS = TRANS;
+		long id = 0;
+		for (Graph g : TRANS) {
+			// pretend that all are correct.
+			correctUses.add(Math.toIntExact(id));
+			totalCorrectUses += Math.min(g.quantity, maxGraphCount);
+			quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
+			id++;
+		}
+		
+		AWeight = 1;
+		BWeight = 1;
+	
 		runIntern();
 
 		LoggingUtils.logTimingStatistics();
@@ -416,13 +460,23 @@ public class gSpan {
 			int A_N = newlyCoveredA.size();
 			int B_N = newlyCoveredB.size();
 
+			
 			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, A_N, B_N);
+			
+			if (A_S1 + B_S1 < 10 && U_S1 >= 5) { // low frequency in labeled graphs, but appears frequently in U, might be important! track for labelling
+				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
+					usefulUnlabelledGraphs.putIfAbsent(unlabeled, 0);
+					usefulUnlabelledGraphs.put(unlabeled, usefulUnlabelledGraphs.get(unlabeled) + 1);
+				}
+			}
 
 			++ID; // must increase since this ID was used for `report` and is included in the
 					// subgraphs output
 
 			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
 					UWeight);
+		
+			
 			if (q_s <= -0.99 || upperBound <= theta) {
 				System.out.println("\tPruning");
 //				coverage.remove(ID - 1);

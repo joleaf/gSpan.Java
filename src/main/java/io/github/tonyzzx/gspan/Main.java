@@ -10,7 +10,11 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
+import java.util.stream.Collectors;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -45,13 +49,28 @@ public class Main {
             		Set<Integer> coveredGraphs = gSpan.unlabeledCoverage.get(feature);
             		gSpan.uncoveredUnlabeledGraphs.removeAll(coveredGraphs);	
             	}
-            	try(BufferedWriter uncoveredWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_uncovered.txt" ))) {
-        			for (Integer uncovered : gSpan.uncoveredUnlabeledGraphs) {
-        				uncoveredWriter.write(uncovered + "\n");
+            	try(BufferedWriter uncoveredWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_interesting_unlabeled.txt" ))) {
+            		
+            		
+            		List<Integer> top = gSpan.usefulUnlabelledGraphs.values().stream().sorted(Collections.reverseOrder()).collect(Collectors.toList());
+            		System.out.println("hits on U");
+            		System.out.println(top.subList(0, 40));
+        			for (Entry<Integer, Integer> entry : gSpan.usefulUnlabelledGraphs.entrySet()) {
+        				Integer graphId = entry.getKey();
+        				if (gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
+        					continue;
+        				}
+        				
+        				// giving us the intersection of 
+        				// 1. graphs that the current set of labels do not cover
+        				// 2. 
+        				if (entry.getValue() > top.get(30)) {
+        					uncoveredWriter.write(entry.getKey() + "\n");
+        				}
         			}
         		}
             	
-            	System.out.println("The uncovered files are in " + arguments.outFilePath + "_uncovered.txt");
+            	System.out.println("The uncovered files are in " + arguments.outFilePath + "_interesting_unlabeled.txt");
             }
         }
 		

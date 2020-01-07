@@ -49,21 +49,14 @@ public class CountingUtils {
 
 		System.out.println("\t==debug==");
 		System.out.print("\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
-//		System.out.println(" , second component=" + Math.abs(gSpan.skewnessImportance / 2 - UWeight *  U_S1));
 
 		double expectedRatio = AWeight / (AWeight + BWeight);
 		LoggingUtils.logOnce("\t\t\t, expectedRatio=" + expectedRatio);
 		System.out.println(
 				"\t\t, second component=" + Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1));
 
-//		double novelty = AWeight * A_N + BWeight * B_N; // HJ: todo; actually this doesn't make any sense
-		// because the first feature added will be overrated!
-		// and during subgraph-lengthening, S subgraph of T; S will score higher than T
-		// even if T is good.
-
 		double score = Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
 				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1) // [0..skewnessImportance/2]
-//				 + novelty
 		;
 		if (Math.abs(AWeight * A_S1 - BWeight * B_S1) > 0 && score <= 0) {
 			gSpan.wouldNotBePrunedWithoutSemiSupervisedFilters += 1;
