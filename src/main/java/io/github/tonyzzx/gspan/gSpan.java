@@ -1,7 +1,6 @@
 package io.github.tonyzzx.gspan;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -9,7 +8,6 @@ import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -17,7 +15,6 @@ import io.github.tonyzzx.gspan.model.DFSCode;
 import io.github.tonyzzx.gspan.model.Edge;
 import io.github.tonyzzx.gspan.model.EfficientHistory;
 import io.github.tonyzzx.gspan.model.Graph;
-import io.github.tonyzzx.gspan.model.History;
 import io.github.tonyzzx.gspan.model.PDFS;
 import io.github.tonyzzx.gspan.model.Projected;
 import io.github.tonyzzx.gspan.model.Vertex;
@@ -62,7 +59,7 @@ public class gSpan {
 
 	public static double skewnessImportance = 20.0;
 
-	int numberOfFeatures = 256;
+	int numberOfFeatures = 2500;
 
 	private final int maxGraphCount = 5; // prevent a single type of graph from domainating the quality landscape
 
@@ -84,7 +81,8 @@ public class gSpan {
 	
 	// uncoveredGraphs are the graphs that we need a human to label more of.
 	public Set<Integer> uncoveredUnlabeledGraphs = new HashSet<>();
-	public Map<Integer, Integer> usefulUnlabelledGraphs = new HashMap<>();
+	public Map<Integer, Integer> usefulGeneralUnlabelledGraphs = new HashMap<>();
+	public Map<Integer, Integer> usefulSpecificUnlabelledGraphs = new HashMap<>();
 	
 	private double theta = 0.0;
 	// theta is the min-value of "upper-bound of CORK" that we need. Branches with upper bound
@@ -350,6 +348,7 @@ public class gSpan {
 
 		os.write("t # " + ID + " * " + sup + System.getProperty("line.separator"));
 		g.write(os);
+		
 		ID++;
 	}
 
@@ -401,6 +400,7 @@ public class gSpan {
 
 		if (isReported) { // isReported == true means that its a frequent subgraph.
 
+			System.out.println("reported freq");
 			// if it's a valid frequent subgraph, then check if its a valid significant
 			// subgraph
 
@@ -463,21 +463,64 @@ public class gSpan {
 			
 			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, A_N, B_N);
 			
-			if (A_S1 + B_S1 < 10 && U_S1 >= 5) { // low frequency in labeled graphs, but appears frequently in U, might be important! track for labelling
+			// low frequency in labeled graphs, but appears frequently in U: might be important! 
+			// these subgraphs have high generality, but we don't know about them yet. Thus, the user need to label more
+			LoggingUtils.logOnce("Boundary of general-unlabelled: " + 0.5 * totalUnlabeled);
+			if (A_S1 + B_S1 < 15 && U_S1 >= 0.5 * totalUnlabeled) { 
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
-					usefulUnlabelledGraphs.putIfAbsent(unlabeled, 0);
-					usefulUnlabelledGraphs.put(unlabeled, usefulUnlabelledGraphs.get(unlabeled) + 1);
+					usefulGeneralUnlabelledGraphs.putIfAbsent(unlabeled, 0);
+					usefulGeneralUnlabelledGraphs.put(unlabeled, usefulGeneralUnlabelledGraphs.get(unlabeled) + 1);
 				}
 			}
+			
+			// low frequency in labeled graphs, but appears just sufficient in U: might be important! 
+			// these subgraphs are significant and have high specificity, but we don't know about them yet.
+			// Thus, the user need to label more
+			LoggingUtils.logOnce("Boundary of specific-unlabelled: " + 0.01 * totalUnlabeled);
+			if (A_S1 + B_S1 < 15 && U_S1 >= 5 && U_S1 < 0.01 * totalUnlabeled) { //1%
+				int selected = 0;
+				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
+					if (selected > 6) {
+						break;
+					}
+					
+					usefulSpecificUnlabelledGraphs.putIfAbsent(unlabeled, 0);
+					usefulSpecificUnlabelledGraphs.put(unlabeled, usefulSpecificUnlabelledGraphs.get(unlabeled) + 1);
+					selected += 1;
+				}
+			}
+			System.out.println("\t! ID=" + ID + "... q_s="+  q_s);
+			
+			for (Vertex debugnode : GRAPH_IS_MIN) {
+				if (debugnode.label == 12) {
+					System.out.println("\t! ID= " + ID + " has label = 12");
+					if (q_s > 0) {
+						System.out.println("\t! ID= " + ID + " has q_s > 0 and label = 12");
+					}
+				}
+				
+				if (debugnode.label == 6842) {
+					System.out.println("\t! ID= " + ID + " has label = 6842");
+					if (q_s > 0) {
+						System.out.println("\t! ID= " + ID + " has q_s > 0 and label = 6842");
+					}
+				}
+			}
+
 
 			++ID; // must increase since this ID was used for `report` and is included in the
 					// subgraphs output
 
 			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
 					UWeight);
+			// debug; never prune
+			upperBound = 1;
+//			q_s = Math.max(q_s, 1);
+			
 		
 			
-			if (q_s <= -0.99 || upperBound <= theta) {
+			if (//q_s <= -0.99 || 
+					upperBound <= theta) {
 				System.out.println("\tPruning");
 //				coverage.remove(ID - 1);
 				return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
@@ -610,25 +653,29 @@ public class gSpan {
 		int originalSize = selectedSubgraphFeatures.size();
 
 		boolean isRelevant = true;
+		double q_s = -1;
+		
 		// 1st filter: early return if obviously not useful
 		if (A_S1 == 0 && B_S1 == 0) {
 			// early reject.
 			// but this indicates that there are subgraphs in U that cannot be labeled
 //			System.out.println("\tearly reject due to absense in labeled sets. ID=" + ID);
 			isRelevant = false;
+			q_s = -10;
 		}
 		// 2nd filter: statistical test for significance
 		if (isRelevant) {
-			FisherExact fisherExact = new FisherExact(totalCorrectUses + totalMisuses);
-			double pValue = fisherExact.getTwoTailedP(A_S1, A_S0, B_S1, B_S0);
+			FisherExact fisherExact = new FisherExact(totalCorrectUses + totalMisuses + 4);
+			double pValue = fisherExact.getTwoTailedP(A_S1+ 1, A_S0 + 1, B_S1 + 1, B_S0 + 1);
 			if (pValue > 0.10) {
 				isRelevant = false;
-				System.out.println("\t\t skipping due to insignificant p value");
+				System.out.println("\t\tID=" + ID + " skipping due to insignificant p value");
 				System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
 			}
+			q_s = -5;
 		}
 
-		double q_s = -1;
+		
 		// 3nd filter
 		if (isRelevant) {
 			q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, A_N, B_N, AWeight, BWeight,

@@ -51,26 +51,69 @@ public class Main {
             	}
             	try(BufferedWriter uncoveredWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_interesting_unlabeled.txt" ))) {
             		
+            		int totalExamples = gSpan.totalCorrectUses + gSpan.totalMisuses + gSpan.totalUnlabeled;
+            		int onePercent = Math.floorDiv(totalExamples, 100);
+            		int pointFivePercent = onePercent / 2;
             		
-            		List<Integer> top = gSpan.usefulUnlabelledGraphs.values().stream().sorted(Collections.reverseOrder()).collect(Collectors.toList());
-            		System.out.println("hits on U");
-            		System.out.println(top.subList(0, 40));
-        			for (Entry<Integer, Integer> entry : gSpan.usefulUnlabelledGraphs.entrySet()) {
+            		System.out.println("\t" + "# uncoveredUnlabeledGraphs: " + gSpan.uncoveredUnlabeledGraphs.size());
+            		
+            		List<Integer> top = gSpan.usefulGeneralUnlabelledGraphs.values().stream()
+            				.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
+            				.sorted(Collections.reverseOrder()).collect(Collectors.toList());
+            		
+            		System.out.println("\t" + "hits on U - usefulGeneralUnlabelledGraphs");
+            		System.out.println("\t" + "# usefulGeneralUnlabelledGraphs: " + gSpan.usefulGeneralUnlabelledGraphs.size());
+            		System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 50)));
+            		
+            		
+            		int writingCount = 0;
+        			for (Entry<Integer, Integer> entry : gSpan.usefulGeneralUnlabelledGraphs.entrySet()) {
         				Integer graphId = entry.getKey();
-        				if (gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
+        				if (!gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
         					continue;
         				}
         				
         				// giving us the intersection of 
         				// 1. graphs that the current set of labels do not cover
-        				// 2. 
-        				if (entry.getValue() > top.get(30)) {
+        				// 2. graphs containing many motifs
+        				if (top.size() <= 50 || entry.getValue() > top.get(50)) {
         					uncoveredWriter.write(entry.getKey() + "\n");
+        					writingCount += 1;
         				}
         			}
+        			System.out.println("\t\t\tWritten " + writingCount + " for general unlabelled subgraphs");
+        			
+        			top = gSpan.usefulSpecificUnlabelledGraphs.values().stream()
+        					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
+        					.sorted(Collections.reverseOrder())
+        					.collect(Collectors.toList());
+        			System.out.println("\thits on U - usefulSpecificUnlabelledGraphs");
+        			System.out.println("\t" + "# usefulSpecificUnlabelledGraphs: " + gSpan.usefulSpecificUnlabelledGraphs.size());
+            		System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 100)));
+        			for (Entry<Integer, Integer> entry : gSpan.usefulSpecificUnlabelledGraphs.entrySet()) {
+        				Integer graphId = entry.getKey();
+        				if (!gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
+        					continue;
+        				}
+//        				
+        				// giving us the intersection of 
+        				// 1. graphs that the current set of labels do not cover
+        				// 2. graphs containing many motifs
+        				if ((top.size() <= pointFivePercent || entry.getValue() > top.get(pointFivePercent))) {
+        					uncoveredWriter.write(entry.getKey() + "\n");
+        					writingCount += 1;
+        				} 
+        				else if (entry.getValue() < top.get(Math.max(0, top.size() - pointFivePercent))) {
+        					uncoveredWriter.write(entry.getKey() + "\n");
+        					writingCount += 1;
+        				}
+        				
+        			}
+        			
+        			System.out.println("\t\t\tWritten " + writingCount + " for specific unlabelled subgraphs");
         		}
             	
-            	System.out.println("The uncovered files are in " + arguments.outFilePath + "_interesting_unlabeled.txt");
+            	System.out.println("The IDs of the uncovered methods have been written to " + arguments.outFilePath + "_interesting_unlabeled.txt");
             }
         }
 		

@@ -12,6 +12,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.mskcc.cbio.portal.stats.FisherExact;
+
 import io.github.tonyzzx.gspan.gSpan;
 import io.github.tonyzzx.gspan.gSpan.GRAPH_LABEL;
 
@@ -56,7 +58,7 @@ public class CountingUtils {
 				"\t\t, second component=" + Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1));
 
 		double score = Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
-				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1) // [0..skewnessImportance/2]
+//				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1) // [0..skewnessImportance/2]
 		;
 		if (Math.abs(AWeight * A_S1 - BWeight * B_S1) > 0 && score <= 0) {
 			gSpan.wouldNotBePrunedWithoutSemiSupervisedFilters += 1;
@@ -140,22 +142,52 @@ public class CountingUtils {
 //		return q_s + maxCorrespondanceIncrease + maxSkewIncrease;
 //	}
 
-	public static double upperBound(double q_s, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,
+	public static double upperBound(double current, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1,
 			double AWeight, double BWeight, double UWeight) {
-		// best case: all of one class shifts to 0
-		// either all of A_S1 becomes 0
-		// or all of B_S1 becomes 0
-		double maxIncrease = Math.max(BWeight * B_S1, AWeight * A_S1);
-		// unfortunately, skewness can increase a lot...
-		// either: reach 0 or max skewnessImportance
-
-		double expectedRatio = AWeight / (AWeight + BWeight);
-
-		double currentSkew = Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1);
-//		double skewnessIncrease = Math.min(currentSkew - 0, gSpan.skewnessImportance - currentSkew);
-
-		return q_s + maxIncrease + currentSkew;
+//		// best case: all of one class shifts to 0
+//		// either all of A_S1 becomes 0
+//		// or all of B_S1 becomes 0
+//		double maxIncrease = Math.max(BWeight * B_S1, AWeight * A_S1);
+//
+//		double expectedRatio = AWeight / (AWeight + BWeight);
+//
+//		double currentSkew = Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1);
+//
+//		return q_s + maxIncrease + currentSkew;
+		
+		// best case:
+		
+		
+		FisherExact fisherExact = new FisherExact(A_S0 + A_S1 + B_S0 + B_S1 + 4);
+		
+		double currentPValue = fisherExact.getTwoTailedP(A_S1 + 1, A_S0 + 1, B_S0 + 1,  B_S1 + 1);
+		
+		double bestPValue = fisherExact.getTwoTailedP(A_S1 + 1, A_S0 + 1, 1, B_S0 + B_S1 + 1);
+		double bestPValue2 = fisherExact.getTwoTailedP(1, A_S0 + A_S1 + 1, B_S1 + 1, B_S0 + 1);
+		
+		if (bestPValue > 0.1 && bestPValue2 > 0.1) { // best case still bad
+			System.out.println("\tGiven ");
+			System.out.print("\tGiven A_S0=" + A_S0 + " , A_S1=" + A_S1);
+			System.out
+					.println("\tGiven " + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
+			System.out.println("p values can become, at best, " + bestPValue + " or " + bestPValue2);
+			return -1;
+		} else if (fuzzyEquals(Math.min(bestPValue, bestPValue2), currentPValue, 0.01)) {
+			System.out.println("\tCan't do better: Given A_S0=" + A_S0 + " , A_S1=" + A_S1);
+			System.out.println("\tGiven " + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
+			System.out.println("\tGiven that we cna't do better, pruning");
+			return -1;
+		} else {
+			return 1;
+		}
 	}
+	
+	public static boolean fuzzyEquals(double a, double b, double tolerance) {
+	    return Math.copySign(a - b, 1.0) <= tolerance
+	        // copySign(x, 1.0) is a branch-free version of abs(x), but with different NaN semantics
+	        || (a == b) // needed to ensure that infinities equal themselves
+	        || (Double.isNaN(a) && Double.isNaN(b));
+	  }
 
 	// actually we don't have to do this for all subgraphs.
 	public static Map<Long, Double> findClosestLabelledPointForKUnLabelled2(int k, Set<Long> subgraphIds,
