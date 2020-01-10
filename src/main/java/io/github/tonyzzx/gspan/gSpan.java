@@ -19,6 +19,7 @@ import io.github.tonyzzx.gspan.model.PDFS;
 import io.github.tonyzzx.gspan.model.Projected;
 import io.github.tonyzzx.gspan.model.Vertex;
 import smu.hongjin.CountingUtils;
+import smu.hongjin.CountingUtils.UpperBoundReturnType;
 import smu.hongjin.LoggingUtils;
 
 import java.util.NavigableMap;
@@ -26,6 +27,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.Vector;
 
+import org.apache.commons.math3.stat.inference.ChiSquareTest;
 import org.mskcc.cbio.portal.stats.FisherExact;
 
 public class gSpan {
@@ -57,9 +59,9 @@ public class gSpan {
 	// have few minority class B
 	double AWeight, BWeight, UWeight;
 
-	public static double skewnessImportance = 20.0;
+	public static double skewnessImportance = 50.0;
 
-	int numberOfFeatures = 2500;
+	int numberOfFeatures = 512;
 
 	private final int maxGraphCount = 5; // prevent a single type of graph from domainating the quality landscape
 
@@ -72,21 +74,19 @@ public class gSpan {
 	// There is no efficient way to enumerate them all
 	public Map<Long, Double> selectedSubgraphFeatures = new HashMap<>();
 
-
-
 	public Set<Integer> misuses = new HashSet<>();
 	public Set<Integer> correctUses = new HashSet<>();
 	public Map<Integer, Integer> quantities = new HashMap<>();
 
-	
-	// uncoveredGraphs are the graphs that we need a human to label more of.
+	// Here are the graphs that we need a human to label more of.
 	public Set<Integer> uncoveredUnlabeledGraphs = new HashSet<>();
 	public Map<Integer, Integer> usefulGeneralUnlabelledGraphs = new HashMap<>();
 	public Map<Integer, Integer> usefulSpecificUnlabelledGraphs = new HashMap<>();
-	
+	public Set<Long> frequentUnlabelledSubgraphs = new HashSet<>(); // subgraphs infrequent in labeled set, but frequent in U
+
+	public Set<Integer> graphsForSubgraphsNeedMoreEvidence = new HashSet<>();
+
 	private double theta = 0.0;
-	// theta is the min-value of "upper-bound of CORK" that we need. Branches with upper bound
-	// lower than this value are pruned.
 
 	public enum GRAPH_LABEL {
 		MISUSE, CORRECT_USE, UNLABELED
@@ -162,7 +162,7 @@ public class gSpan {
 		LoggingUtils.logTimingStatistics();
 
 	}
-	
+
 	/**
 	 * Run gSpan. The secondary interface
 	 *
@@ -172,7 +172,8 @@ public class gSpan {
 	 * @param minNodeNum Minimum number of nodes
 	 * @throws IOException
 	 */
-	void runIgnoringLabels(ArrayList<Graph> TRANS, FileWriter writers, long minSup, long maxNodeNum, long minNodeNum) throws IOException {
+	void runIgnoringLabels(ArrayList<Graph> TRANS, FileWriter writers, long minSup, long maxNodeNum, long minNodeNum)
+			throws IOException {
 
 		LoggingUtils.logTimingStatistics();
 
@@ -192,10 +193,10 @@ public class gSpan {
 			quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
 			id++;
 		}
-		
+
 		AWeight = 1;
 		BWeight = 1;
-	
+
 		runIntern();
 
 		LoggingUtils.logTimingStatistics();
@@ -225,9 +226,11 @@ public class gSpan {
 			} else if (g.label == 'U') {
 				totalUnlabeled += Math.min(g.quantity, maxGraphCount);
 //				totalUnlabeled += 1;
-				
-				uncoveredUnlabeledGraphs.add(Math.toIntExact(id)); // first, we add all unlabeled data to uncoveredUnlabeledGraphs
-				// at the end of the mining process, we will go through it and remove covered graphs 
+
+				uncoveredUnlabeledGraphs.add(Math.toIntExact(id)); // first, we add all unlabeled data to
+																	// uncoveredUnlabeledGraphs
+				// at the end of the mining process, we will go through it and remove covered
+				// graphs
 			} else {
 				throw new RuntimeException(
 						"huh? label (which should be 'M', 'C' or 'U') seems to be " + g.label + ", at id=" + id);
@@ -348,7 +351,7 @@ public class gSpan {
 
 		os.write("t # " + ID + " * " + sup + System.getProperty("line.separator"));
 		g.write(os);
-		
+
 		ID++;
 	}
 
@@ -399,8 +402,6 @@ public class gSpan {
 		boolean isReported = report(sup);
 
 		if (isReported) { // isReported == true means that its a frequent subgraph.
-
-			System.out.println("reported freq");
 			// if it's a valid frequent subgraph, then check if its a valid significant
 			// subgraph
 
@@ -460,67 +461,107 @@ public class gSpan {
 			int A_N = newlyCoveredA.size();
 			int B_N = newlyCoveredB.size();
 
-			
 			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, A_N, B_N);
-			
-			// low frequency in labeled graphs, but appears frequently in U: might be important! 
-			// these subgraphs have high generality, but we don't know about them yet. Thus, the user need to label more
+
+			// low frequency in labeled graphs, but appears frequently in U: might be
+			// important!
+			// these subgraphs have high generality, but we don't know about them yet. Thus,
+			// the user need to label more
 			LoggingUtils.logOnce("Boundary of general-unlabelled: " + 0.5 * totalUnlabeled);
-			if (A_S1 + B_S1 < 15 && U_S1 >= 0.5 * totalUnlabeled) { 
+			if (A_S1 + B_S1 < 15 && U_S1 >= 0.5 * totalUnlabeled) {
+				frequentUnlabelledSubgraphs.add(ID);
+				
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
 					usefulGeneralUnlabelledGraphs.putIfAbsent(unlabeled, 0);
 					usefulGeneralUnlabelledGraphs.put(unlabeled, usefulGeneralUnlabelledGraphs.get(unlabeled) + 1);
 				}
 			}
-			
-			// low frequency in labeled graphs, but appears just sufficient in U: might be important! 
-			// these subgraphs are significant and have high specificity, but we don't know about them yet.
+
+			// low frequency in labeled graphs, but appears just sufficient in U: might be
+			// important!
+			// these subgraphs are significant and have high specificity, but we don't know
+			// about them yet.
 			// Thus, the user need to label more
 			LoggingUtils.logOnce("Boundary of specific-unlabelled: " + 0.01 * totalUnlabeled);
-			if (A_S1 + B_S1 < 15 && U_S1 >= 5 && U_S1 < 0.01 * totalUnlabeled) { //1%
+			if (A_S1 + B_S1 < 15 && U_S1 >= 5 && U_S1 < 0.05 * totalUnlabeled) { // 0.5%
+				frequentUnlabelledSubgraphs.add(ID);
+				
 				int selected = 0;
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
-					if (selected > 6) {
+					if (selected > 10) {
 						break;
 					}
-					
+
 					usefulSpecificUnlabelledGraphs.putIfAbsent(unlabeled, 0);
 					usefulSpecificUnlabelledGraphs.put(unlabeled, usefulSpecificUnlabelledGraphs.get(unlabeled) + 1);
+					
 					selected += 1;
 				}
 			}
-			System.out.println("\t! ID=" + ID + "... q_s="+  q_s);
-			
+
 			for (Vertex debugnode : GRAPH_IS_MIN) {
-				if (debugnode.label == 12) {
+				if (debugnode.label == 12) { // conatinsKey. why doesn't this get accepted as a strong feature? q_s too
+												// low? why
 					System.out.println("\t! ID= " + ID + " has label = 12");
+					System.out.println("\t! ID= " + ID + " ");
+					System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
+					System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
 					if (q_s > 0) {
-						System.out.println("\t! ID= " + ID + " has q_s > 0 and label = 12");
+						System.out.println("\t! ID= " + ID + " has q_s = " + q_s + " > 0 and label = 12");
 					}
 				}
-				
+
 				if (debugnode.label == 6842) {
 					System.out.println("\t! ID= " + ID + " has label = 6842");
+					System.out.println("\t! ID= " + ID + " ");
+					System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
+					System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
 					if (q_s > 0) {
-						System.out.println("\t! ID= " + ID + " has q_s > 0 and label = 6842");
+						System.out.println("\t! ID= " + ID + " has q_s = " + q_s + " > 0  and label = 6842");
+					}
+				}
+
+				if (debugnode.label == 526) { // interface_Map. we need more of this/ what does its coverage
+												// distribution look like?
+
+					System.out.println("\t! ID= " + ID + " has label = 526");
+					System.out.println("\t! ID= " + ID + " ");
+					System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
+					System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
+					if (q_s > 0) {
+						System.out.println("\t! ID= " + ID + " has q_s = " + q_s + " > 0  and label = 526");
 					}
 				}
 			}
 
-
-			++ID; // must increase since this ID was used for `report` and is included in the
-					// subgraphs output
-
-			double upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight, BWeight,
-					UWeight);
-			// debug; never prune
-			upperBound = 1;
-//			q_s = Math.max(q_s, 1);
 			
 		
+			UpperBoundReturnType upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight,
+					BWeight, UWeight);
+			// debug; never prune
+//			upperBound = UpperBoundReturnType.GOOD;
+//			q_s = Math.max(q_s, 1);
+
+			if (upperBound == UpperBoundReturnType.EXPLORE) {
+				// maybe getting more data can help?
+		
+				int selected = 0;
+				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
+					if (selected > 5) {
+						break;
+					}
+					graphsForSubgraphsNeedMoreEvidence.add(unlabeled);
+
+					selected += 1;
+				}
 			
-			if (//q_s <= -0.99 || 
-					upperBound <= theta) {
+			}
+			
+			++ID; // must increase since this ID was used for `report` and is included in the
+			// subgraphs output
+
+
+			if (upperBound == UpperBoundReturnType.BAD) {
 				System.out.println("\tPruning");
 //				coverage.remove(ID - 1);
 				return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
@@ -654,7 +695,7 @@ public class gSpan {
 
 		boolean isRelevant = true;
 		double q_s = -1;
-		
+
 		// 1st filter: early return if obviously not useful
 		if (A_S1 == 0 && B_S1 == 0) {
 			// early reject.
@@ -665,17 +706,27 @@ public class gSpan {
 		}
 		// 2nd filter: statistical test for significance
 		if (isRelevant) {
-			FisherExact fisherExact = new FisherExact(totalCorrectUses + totalMisuses + 4);
-			double pValue = fisherExact.getTwoTailedP(A_S1+ 1, A_S0 + 1, B_S1 + 1, B_S0 + 1);
-			if (pValue > 0.10) {
+			if (A_S1 < 3 && B_S1 < 3) { // early return. Minority class can reach significance with too few items.
 				isRelevant = false;
-				System.out.println("\t\tID=" + ID + " skipping due to insignificant p value");
-				System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+				q_s = -5;
+			} else {
+
+				long[][] currentCounts = { { A_S1, A_S0 }, { B_S1, B_S0 } };
+				ChiSquareTest test = new ChiSquareTest();
+
+				double pValue = test.chiSquareTest(currentCounts);
+				if (pValue > 0.1) {
+					isRelevant = false;
+					System.out.println("\t\tID=" + ID + " skipping due to insignificant p value");
+					System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+				} else {
+					System.out.println("\t\tID=" + ID + " p value is low enough");
+					System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+				}
+				q_s = -5;
 			}
-			q_s = -5;
 		}
 
-		
 		// 3nd filter
 		if (isRelevant) {
 			q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, A_N, B_N, AWeight, BWeight,

@@ -82,6 +82,7 @@ public class Graph extends ArrayList<Vertex> {
                     Vertex vex = new Vertex();
                     vex.label = Integer.parseInt(result.get(2));
                     this.add(vex);
+                    
                 } else if (result.get(0).equals("e") && result.size() >= 4) {
                     int from = Integer.parseInt(result.get(1));
                     int to = Integer.parseInt(result.get(2));

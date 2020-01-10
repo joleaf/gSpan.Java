@@ -11,6 +11,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -49,11 +50,22 @@ public class Main {
             		Set<Integer> coveredGraphs = gSpan.unlabeledCoverage.get(feature);
             		gSpan.uncoveredUnlabeledGraphs.removeAll(coveredGraphs);	
             	}
-            	try(BufferedWriter uncoveredWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_interesting_unlabeled.txt" ))) {
-            		
+            	
+            	Set<Integer> vanillaGraphs = new HashSet<>(); 			// set of graphs that not covered, even by the frequent subgraphs in U
+            	vanillaGraphs.addAll(gSpan.uncoveredUnlabeledGraphs); 	// first init to graphs in U that are uncovered by the chosen subgraph features
+            	
+            	// remove from vanillaGraphs, the other graphs that are covered by frequentUnlabelledSubgraphs
+            	for (long frequentInUSubgraph : gSpan.frequentUnlabelledSubgraphs) {
+            		Set<Integer> coveredGraphs = gSpan.unlabeledCoverage.get(frequentInUSubgraph);
+            		vanillaGraphs.removeAll(coveredGraphs);
+            	}
+            	
+            	
+            	try(BufferedWriter unlabeledNeedsLabelsWriter = new BufferedWriter(new FileWriter(arguments.outFilePath + "_interesting_unlabeled.txt" ))) {
             		int totalExamples = gSpan.totalCorrectUses + gSpan.totalMisuses + gSpan.totalUnlabeled;
             		int onePercent = Math.floorDiv(totalExamples, 100);
             		int pointFivePercent = onePercent / 2;
+            		int pointTwoFivepercent = pointFivePercent / 2;
             		
             		System.out.println("\t" + "# uncoveredUnlabeledGraphs: " + gSpan.uncoveredUnlabeledGraphs.size());
             		
@@ -77,14 +89,14 @@ public class Main {
         				// 1. graphs that the current set of labels do not cover
         				// 2. graphs containing many motifs
         				if (top.size() <= 50 || entry.getValue() > top.get(50)) {
-        					uncoveredWriter.write(entry.getKey() + "\n");
+        					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
         					writingCount += 1;
         				}
         			}
         			System.out.println("\t\t\tWritten " + writingCount + " for general unlabelled subgraphs");
         			
         			top = gSpan.usefulSpecificUnlabelledGraphs.values().stream()
-        					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
+//        					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
         					.sorted(Collections.reverseOrder())
         					.collect(Collectors.toList());
         			System.out.println("\thits on U - usefulSpecificUnlabelledGraphs");
@@ -92,25 +104,39 @@ public class Main {
             		System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 100)));
         			for (Entry<Integer, Integer> entry : gSpan.usefulSpecificUnlabelledGraphs.entrySet()) {
         				Integer graphId = entry.getKey();
-        				if (!gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
-        					continue;
-        				}
+//        				if (!gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
+//        					continue;
+//        				}
 //        				
         				// giving us the intersection of 
         				// 1. graphs that the current set of labels do not cover
         				// 2. graphs containing many motifs
-        				if ((top.size() <= pointFivePercent || entry.getValue() > top.get(pointFivePercent))) {
-        					uncoveredWriter.write(entry.getKey() + "\n");
+        				if ((top.size() <= pointTwoFivepercent || entry.getValue() > top.get(pointTwoFivepercent))) {
+        					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
         					writingCount += 1;
         				} 
-        				else if (entry.getValue() < top.get(Math.max(0, top.size() - pointFivePercent))) {
-        					uncoveredWriter.write(entry.getKey() + "\n");
+        				else if (entry.getValue() < top.get(Math.max(0, top.size() - pointTwoFivepercent))) {
+        					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
         					writingCount += 1;
         				}
-        				
         			}
+        			System.out.println("\t\t\tWritten " + writingCount + " (accumulative count) for specific unlabelled subgraphs");
         			
-        			System.out.println("\t\t\tWritten " + writingCount + " for specific unlabelled subgraphs");
+        			
+        			for (int needMoreEvidenceGraph : gSpan.graphsForSubgraphsNeedMoreEvidence) {
+        				unlabeledNeedsLabelsWriter.write(needMoreEvidenceGraph + "\n");
+        				writingCount += 1;
+        			}
+        			System.out.println("\t\t\tWritten " + writingCount + " (accumulative count) for subgraphs that may benefit from more evidence");
+        			
+        			
+        			
+        			for (int needMoreEvidenceGraph : vanillaGraphs) {
+        				unlabeledNeedsLabelsWriter.write(needMoreEvidenceGraph + "\n");
+        				writingCount += 1;
+        			}
+        			System.out.println("\t\t\tWritten " + writingCount + " (accumulative count) for vanilla graphs");
+        			
         		}
             	
             	System.out.println("The IDs of the uncovered methods have been written to " + arguments.outFilePath + "_interesting_unlabeled.txt");
