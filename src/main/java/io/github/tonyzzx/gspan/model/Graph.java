@@ -10,6 +10,9 @@ public class Graph extends ArrayList<Vertex> {
     public int edge_size = 0;
     boolean directed = false;
     
+    
+    public int ID;
+    
     public char label;
     public int quantity = 0; // In this formulation of the problem, each graph represents many clones.
 
@@ -65,6 +68,9 @@ public class Graph extends ArrayList<Vertex> {
                     	throw new RuntimeException("Unexpected file format");
                     }
             	} else if (result.get(0).equals("t")) {
+            		
+            		String supposedID = result.get(2);
+            		this.ID = Integer.parseInt(supposedID);
                     
                     char label = result.get(3).charAt(0);
                     // 'U' for unlabeled

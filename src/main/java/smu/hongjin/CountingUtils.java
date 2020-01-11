@@ -186,7 +186,8 @@ public class CountingUtils {
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
 			// this is getting pruned, but we should see what graphs contain this subgraph
-			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05) {
+//			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05) {
+			if (currentPValue > 0.05 && currentPValue < 0.10) {
 				System.out.println("\tPruning but ask for more labels");
 				return UpperBoundReturnType.EXPLORE;
 			} else {
@@ -201,7 +202,8 @@ public class CountingUtils {
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
 			// this is getting pruned, but we should see what graphs contain this subgraph
-			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05) {
+//			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05) {
+			if (currentPValue > 0.05 && currentPValue < 0.10) {
 				System.out.println("\tPruning but ask for more labels");
 				return UpperBoundReturnType.EXPLORE;
 			} else {
@@ -376,6 +378,10 @@ public class CountingUtils {
 		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
 			graphs.addAll(entry.getValue());
 		}
+		graphs.addAll(gSpan.correctUses);
+		graphs.addAll(gSpan.misuses);
+
+		// hmm, what about graphs completely uncovered??
 		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
 
 		writer.write("graph_id,is_correct");
@@ -384,28 +390,51 @@ public class CountingUtils {
 		}
 		writer.write("\n");
 
-		// <graph id>, feature_1, feature_2, feature_3, ... \n
+		// amplify minority class
+		int repeatMisuses;
+		int repeatCorrect;
+		if (gSpan.correctUses.size() > gSpan.misuses.size()) {
+			repeatCorrect = 1;
+//			repeatMisuses = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalCorrectUses / gSpan.totalMisuses)));
+			repeatMisuses = 1;
+		} else {
+			repeatMisuses = 1;
+//			repeatCorrect = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalMisuses / gSpan.totalCorrectUses)));
+			repeatCorrect = 1;
+		}
+
+		System.out.println("\tWriting to feature vector file");
+		System.out.println("\tRepeating; repeatCorrect= " + repeatCorrect + " , and repeatMisuses=" + repeatMisuses);
+
+		// <graph id>, is_correct, feature_1, feature_2, feature_3, ... \n
 		for (Integer graph : graphs) {
+
 			for (int graphNum = 0; graphNum < gSpan.quantities.get(graph); graphNum++) {
+				boolean isCorrect = gSpan.correctUses.contains(graph);
+				boolean isMisuse = gSpan.misuses.contains(graph);
 
-				writer.write(graph + "_" + graphNum + ",");
+				int timesToRepeat = isCorrect ? repeatCorrect : repeatMisuses;
+				for (int repeated = 0; repeated < timesToRepeat; repeated++) {
 
-				if (gSpan.correctUses.contains(graph)) {
-					writer.write("1");
-				} else if (gSpan.misuses.contains(graph)) {
-					writer.write("0");
-				} else {
-					throw new RuntimeException("graph label is incorrect somehow " + graph);
-				}
+					writer.write(graph + "_" + graphNum + "_" + repeated + ",");
 
-				for (Long feature : features) {
-					if (coverage.get(feature).contains(graph)) {
-						writer.write(",1");
+					if (isCorrect) {
+						writer.write("1");
+					} else if (isMisuse) {
+						writer.write("0");
 					} else {
-						writer.write(",0");
+						throw new RuntimeException("graph label is incorrect somehow " + graph);
 					}
+
+					for (Long feature : features) {
+						if (coverage.get(feature).contains(graph)) {
+							writer.write(",1");
+						} else {
+							writer.write(",0");
+						}
+					}
+					writer.write("\n");
 				}
-				writer.write("\n");
 			}
 		}
 

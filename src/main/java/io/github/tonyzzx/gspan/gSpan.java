@@ -48,8 +48,8 @@ public class gSpan {
 	private NavigableMap<Integer, Integer> singleVertexLabel;
 
 	// HJ for counting coverage of dataset
-	int totalMisuses = 0;
-	int totalCorrectUses = 0;
+	public int totalMisuses = 0;
+	public int totalCorrectUses = 0;
 	int totalUnlabeled = 0;
 
 	// HJ: weights of the components
@@ -61,9 +61,9 @@ public class gSpan {
 
 	public static double skewnessImportance = 50.0;
 
-	int numberOfFeatures = 512;
+	int numberOfFeatures = 128;
 
-	private final int maxGraphCount = 5; // prevent a single type of graph from domainating the quality landscape
+	private final int maxGraphCount = 3; // prevent a single type of graph from domainating the quality landscape
 
 	// a minimal quality q_s to beat
 	double minimalQS;
@@ -212,20 +212,26 @@ public class gSpan {
 			read = g.read(read);
 			if (g.isEmpty())
 				break;
+			if (g.ID != id) {
+				throw new RuntimeException("ID differs at " + g.ID + " (read from file) and " + id + " (determined by increasing number). They have to be the same");
+			}
 			TRANS.add(g);
 			if (g.label == 'M') {
+			
 				misuses.add(Math.toIntExact(id));
 				totalMisuses += Math.min(g.quantity, maxGraphCount);
 				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
-//				totalMisuses += 1;
+
 			} else if (g.label == 'C') {
+		
 				correctUses.add(Math.toIntExact(id));
 				totalCorrectUses += Math.min(g.quantity, maxGraphCount);
 				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
-//				totalCorrectUses += 1;
+
 			} else if (g.label == 'U') {
+	
 				totalUnlabeled += Math.min(g.quantity, maxGraphCount);
-//				totalUnlabeled += 1;
+
 
 				uncoveredUnlabeledGraphs.add(Math.toIntExact(id)); // first, we add all unlabeled data to
 																	// uncoveredUnlabeledGraphs
@@ -324,7 +330,7 @@ public class gSpan {
 					// Build the initial two-node graph. It will be grown recursively within
 					// `project`.
 					DFS_CODE.push(0, 1, fromLabel.getKey(), eLabel.getKey(), toLabel.getKey());
-					project(toLabel.getValue());
+					project(toLabel.getValue(), 0);
 					DFS_CODE.pop();
 				}
 			}
@@ -380,7 +386,7 @@ public class gSpan {
 	 * @param projected
 	 * @throws IOException
 	 */
-	private void project(Projected projected) throws IOException {
+	private void project(Projected projected, double currentBranchScore) throws IOException {
 		// Check if the pattern is frequent enough.
 		resetCountsOfLabels();
 		int sup = support(projected);
@@ -406,8 +412,7 @@ public class gSpan {
 			// subgraph
 
 			int A_S0, B_S0, U_S0, A_S1, B_S1, U_S1;
-			Set<Integer> AGraphs;
-			Set<Integer> BGraphs;
+
 			if (totalCorrectUses > totalMisuses) {
 				LoggingUtils.logOnce("Majority class is correct usage");
 				// correct uses are the majority case, so A is the "Correct use" (C) label
@@ -417,8 +422,7 @@ public class gSpan {
 				B_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
 				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-				AGraphs = correctUses;
-				BGraphs = misuses;
+	
 			} else {
 				LoggingUtils.logOnce("Majority class is misuse");
 				// misuses are the majority case, so A is the "Misuse" (M) label
@@ -428,41 +432,29 @@ public class gSpan {
 				B_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
 				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-				AGraphs = misuses;
-				BGraphs = correctUses;
+		
 			}
 
-			Set<Integer> alreadyCoveredA = new HashSet<>();
-			Set<Integer> alreadyCoveredB = new HashSet<>();
-			for (Long selectedSubgraphFeature : selectedSubgraphFeatures.keySet()) {
-				Set<Integer> covered = coverage.get(selectedSubgraphFeature);
-				for (int coveredGraph : covered) {
-					if (AGraphs.contains(coveredGraph)) {
-						alreadyCoveredA.add(coveredGraph);
-					} else if (BGraphs.contains(coveredGraph)) {
-						alreadyCoveredB.add(coveredGraph);
-					}
+			for (Vertex debugnode : GRAPH_IS_MIN) {
+				if (debugnode.label == 526) { // Map_Interface
+					System.out.println("\tFound debug node: " + 526);
+					System.out.println("\tCounts are:");
+					System.out.println("\t" + A_S0 +","+ B_S0+","+ U_S0+","+ A_S1+","+ B_S1);
+					
+				}
+				if (debugnode.label == 59) { // param:Object
+					// perhaps it might be interesting to see if a param:Object -> map.get() -> return is a motif?
+					System.out.println("\tFound debug node: " + 59);
+					System.out.println("\tCounts are:");
+					System.out.println("\t" + A_S0 +","+ B_S0+","+ U_S0+","+ A_S1+","+ B_S1);
+					
 				}
 			}
 
-			Set<Integer> newlyCoveredA = new HashSet<>();
-			Set<Integer> newlyCoveredB = new HashSet<>();
-			for (Integer newlyCovered : coverage.get(ID)) {
-				if (AGraphs.contains(newlyCovered)) {
-					newlyCoveredA.add(newlyCovered);
-				} else if (BGraphs.contains(newlyCovered)) {
-					newlyCoveredB.add(newlyCovered);
-				}
-			}
+			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1, currentBranchScore);
 
-			newlyCoveredA.removeAll(alreadyCoveredA);
-			newlyCoveredB.removeAll(alreadyCoveredB);
-
-			int A_N = newlyCoveredA.size();
-			int B_N = newlyCoveredB.size();
-
-			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, A_N, B_N);
-
+			currentBranchScore = Math.max(q_s, currentBranchScore);
+			
 			// low frequency in labeled graphs, but appears frequently in U: might be
 			// important!
 			// these subgraphs have high generality, but we don't know about them yet. Thus,
@@ -498,43 +490,7 @@ public class gSpan {
 					selected += 1;
 				}
 			}
-
-			for (Vertex debugnode : GRAPH_IS_MIN) {
-				if (debugnode.label == 12) { // conatinsKey. why doesn't this get accepted as a strong feature? q_s too
-												// low? why
-					System.out.println("\t! ID= " + ID + " has label = 12");
-					System.out.println("\t! ID= " + ID + " ");
-					System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
-					System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
-					if (q_s > 0) {
-						System.out.println("\t! ID= " + ID + " has q_s = " + q_s + " > 0 and label = 12");
-					}
-				}
-
-				if (debugnode.label == 6842) {
-					System.out.println("\t! ID= " + ID + " has label = 6842");
-					System.out.println("\t! ID= " + ID + " ");
-					System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
-					System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
-					if (q_s > 0) {
-						System.out.println("\t! ID= " + ID + " has q_s = " + q_s + " > 0  and label = 6842");
-					}
-				}
-
-				if (debugnode.label == 526) { // interface_Map. we need more of this/ what does its coverage
-												// distribution look like?
-
-					System.out.println("\t! ID= " + ID + " has label = 526");
-					System.out.println("\t! ID= " + ID + " ");
-					System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
-					System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
-					if (q_s > 0) {
-						System.out.println("\t! ID= " + ID + " has q_s = " + q_s + " > 0  and label = 526");
-					}
-				}
-			}
-
-			
+	
 		
 			UpperBoundReturnType upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight,
 					BWeight, UWeight);
@@ -671,7 +627,7 @@ public class gSpan {
 		for (Entry<Integer, NavigableMap<Integer, Projected>> to : new_bck_root.entrySet()) {
 			for (Entry<Integer, Projected> eLabel : to.getValue().entrySet()) {
 				DFS_CODE.push(maxToc, to.getKey(), -1, eLabel.getKey(), -1);
-				project(eLabel.getValue());
+				project(eLabel.getValue(), currentBranchScore);
 				DFS_CODE.pop();
 			}
 		}
@@ -682,7 +638,7 @@ public class gSpan {
 			for (Entry<Integer, NavigableMap<Integer, Projected>> eLabel : from.getValue().entrySet()) {
 				for (Entry<Integer, Projected> toLabel : eLabel.getValue().entrySet()) {
 					DFS_CODE.push(from.getKey(), maxToc + 1, -1, eLabel.getKey(), toLabel.getKey());
-					project(toLabel.getValue());
+					project(toLabel.getValue(), currentBranchScore);
 					DFS_CODE.pop();
 				}
 			}
@@ -690,7 +646,8 @@ public class gSpan {
 	}
 
 	private double computeQualityTODetermineIfSignificant(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,
-			int A_N, int B_N) {
+			int A_N, int B_N, double currentBranchScore) {
+		
 		int originalSize = selectedSubgraphFeatures.size();
 
 		boolean isRelevant = true;
@@ -715,14 +672,9 @@ public class gSpan {
 				ChiSquareTest test = new ChiSquareTest();
 
 				double pValue = test.chiSquareTest(currentCounts);
-				if (pValue > 0.1) {
+				if (pValue > 0.05) {
 					isRelevant = false;
-					System.out.println("\t\tID=" + ID + " skipping due to insignificant p value");
-					System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
-				} else {
-					System.out.println("\t\tID=" + ID + " p value is low enough");
-					System.out.println("\t\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
-				}
+				} 
 				q_s = -5;
 			}
 		}
@@ -733,7 +685,12 @@ public class gSpan {
 					UWeight, ID);
 
 			System.out.println("\t\tq_s is " + q_s);
-			isRelevant = q_s > theta;
+			isRelevant = q_s > theta 
+					&& q_s > currentBranchScore; // only if we beat the more general subgraph of this particular subgraph, then we add it.
+					
+			if ( q_s > theta  && q_s < currentBranchScore) {
+				System.out.println("Reject due to similar score as subgraph");
+			}
 		}
 
 		if (isRelevant) {
