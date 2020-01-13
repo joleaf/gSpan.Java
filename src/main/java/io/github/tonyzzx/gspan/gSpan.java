@@ -61,7 +61,7 @@ public class gSpan {
 
 	public static double skewnessImportance = 50.0;
 
-	int numberOfFeatures = 128;
+	int numberOfFeatures = 100;
 
 	private final int maxGraphCount = 3; // prevent a single type of graph from domainating the quality landscape
 
@@ -686,7 +686,7 @@ public class gSpan {
 
 			System.out.println("\t\tq_s is " + q_s);
 			isRelevant = q_s > theta 
-					&& q_s > currentBranchScore; // only if we beat the more general subgraph of this particular subgraph, then we add it.
+					&& q_s > currentBranchScore; // only if we beat the more general, smaller, subgraph of this particular subgraph, then we add it.
 					
 			if ( q_s > theta  && q_s < currentBranchScore) {
 				System.out.println("Reject due to similar score as subgraph");
@@ -725,14 +725,14 @@ public class gSpan {
 
 			// set new value of theta, which is the minimal quality value among the selected
 			// (so far) subgraphs
-//			theta = q_s;
-//			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
-//				theta = Math.min(theta, subgraphEntry.getValue());
-//			}
-			// theta is still equals to 0. we want all the good subgraphs.
+			theta = q_s;
+			for (Entry<Long, Double> subgraphEntry : selectedSubgraphFeatures.entrySet()) {
+				theta = Math.min(theta, subgraphEntry.getValue());
+			}
+			// set theta is equals to 0 if we want all the good subgraphs.
 
 			if (selectedSubgraphFeatures.containsKey(ID)) {
-				throw new RuntimeException("iterating into the same subgraph ID again! " + ID);
+				throw new RuntimeException("iterating into the same subgraph ID again!/Reusing an existing subgraph ID " + ID);
 			}
 
 			selectedSubgraphFeatures.put(ID, q_s);

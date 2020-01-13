@@ -66,8 +66,19 @@ public class CountingUtils {
 			System.out.println("\t\t" + ID + " would be accepted if not for the distribution penalty!");
 			System.out.println("\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
 		}
-
+		
+//		long[][] currentCounts = { { A_S1, A_S0 }, { B_S1, B_S0 } };
+//		ChiSquareTest test = new ChiSquareTest();
+//		
+//		System.out.println("\t==debug==");
+//		System.out.println("\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+//		System.out.println("\t\tA_S0=" + A_S0 + ",B_S0=" + B_S0);
+//		
+//
+//		double score = test.chiSquare(currentCounts);
+//		System.out.println("\t\tvalue=" + score);
 		return score;
+
 	}
 
 	public static double skewnessScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, int A_N, int B_N,
@@ -395,12 +406,12 @@ public class CountingUtils {
 		int repeatCorrect;
 		if (gSpan.correctUses.size() > gSpan.misuses.size()) {
 			repeatCorrect = 1;
-//			repeatMisuses = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalCorrectUses / gSpan.totalMisuses)));
-			repeatMisuses = 1;
+			repeatMisuses = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalCorrectUses / gSpan.totalMisuses)));
+//			repeatMisuses = 1;
 		} else {
 			repeatMisuses = 1;
-//			repeatCorrect = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalMisuses / gSpan.totalCorrectUses)));
-			repeatCorrect = 1;
+			repeatCorrect = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalMisuses / gSpan.totalCorrectUses)));
+//			repeatCorrect = 1;
 		}
 
 		System.out.println("\tWriting to feature vector file");
