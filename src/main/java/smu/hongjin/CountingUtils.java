@@ -155,23 +155,11 @@ public class CountingUtils {
 //	}
 
 	public enum UpperBoundReturnType {
-		BAD, EXPLORE, GOOD;
+		BAD, BAD_EXPLORE, GOOD, GOOD_EXPLORE;
 	}
 
 	public static UpperBoundReturnType upperBound(double current, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0,
-			int U_S1, double AWeight, double BWeight, double UWeight) {
-//		// best case: all of one class shifts to 0
-//		// either all of A_S1 becomes 0
-//		// or all of B_S1 becomes 0
-//		double maxIncrease = Math.max(BWeight * B_S1, AWeight * A_S1);
-//
-//		double expectedRatio = AWeight / (AWeight + BWeight);
-//
-//		double currentSkew = Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1);
-//
-//		return q_s + maxIncrease + currentSkew;
-
-		// best case:
+			int U_S1, double AWeight, double BWeight, double UWeight, boolean isDebug) {
 
 		if (A_S1 == 0 && B_S1 == 0) {
 			return UpperBoundReturnType.BAD;
@@ -184,10 +172,16 @@ public class CountingUtils {
 
 		long[][] bestCounts1 = { { A_S1, A_S0 }, { 0, B_S0 + B_S1 } };
 		double bestPValue1 = test.chiSquareTest(bestCounts1);
+		if (Double.isNaN(bestPValue1)) { // can reach Nan if aA_S1 was already 0 
+			bestPValue1 = currentPValue;
+		}
 
 		long[][] bestCounts2 = { { 0, A_S0 + A_S1 }, { B_S1, B_S0 } };
 		double bestPValue2 = test.chiSquareTest(bestCounts2);
-
+		if (Double.isNaN(bestPValue2)) {// can reach Nan if B_S1 was already 0
+			bestPValue2 = currentPValue;
+		}
+		
 		if (bestPValue1 > 0.1 && bestPValue2 > 0.1) { // best case still bad
 			System.out.println("\tBest case still bad. Current p-value=" + currentPValue);
 			System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
@@ -197,10 +191,10 @@ public class CountingUtils {
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
 			// this is getting pruned, but we should see what graphs contain this subgraph
-//			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05) {
-			if (currentPValue > 0.05 && currentPValue < 0.10) {
+			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
+//			if (currentPValue > 0.05 && currentPValue < 0.10) {
 				System.out.println("\tPruning but ask for more labels");
-				return UpperBoundReturnType.EXPLORE;
+				return UpperBoundReturnType.BAD_EXPLORE;
 			} else {
 				return UpperBoundReturnType.BAD;
 			}
@@ -213,15 +207,23 @@ public class CountingUtils {
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
 			// this is getting pruned, but we should see what graphs contain this subgraph
-//			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05) {
-			if (currentPValue > 0.05 && currentPValue < 0.10) {
+			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
+//			if (currentPValue > 0.05 && currentPValue < 0.10 ) {
 				System.out.println("\tPruning but ask for more labels");
-				return UpperBoundReturnType.EXPLORE;
+				return UpperBoundReturnType.BAD_EXPLORE;
 			} else {
 				return UpperBoundReturnType.BAD;
 			}
 		} else {
-			return UpperBoundReturnType.GOOD;
+			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
+				System.out.println("\tNot pruning, but should remember to ask for more labels. p-value=" + currentPValue);
+				System.out.println("\t\tRemmeber to ask for more: A_S0=" + A_S0 + " , A_S1=" + A_S1);
+				System.out.println("\t\tRemmeber to ask for more: B_S0=" + B_S0 + " , B_S1=" + B_S1);
+				return UpperBoundReturnType.GOOD_EXPLORE;
+			} else {
+				return UpperBoundReturnType.GOOD;
+			}
+			
 		}
 	}
 
@@ -233,6 +235,24 @@ public class CountingUtils {
 				|| (Double.isNaN(a) && Double.isNaN(b));
 	}
 
+	
+	public static int minimumCountForSignificanceMinority(int classACounts, int classBCounts) {
+		ChiSquareTest test = new ChiSquareTest();
+
+		int majorityCount = classACounts > classBCounts ? classACounts : classBCounts;
+		int minorityCount = classACounts > classBCounts ? classBCounts : classACounts;
+		
+		for (int i = 0; i < minorityCount; i++) {
+			long[][] currentCounts = { { 0, majorityCount }, { i, minorityCount - i } };
+			double currentPValue = test.chiSquareTest(currentCounts);
+			if (currentPValue < 0.05) {
+				return i;
+			}
+		}
+		
+		throw new RuntimeException("Impossible!");
+	}
+	
 	// actually we don't have to do this for all subgraphs.
 	public static Map<Long, Double> findClosestLabelledPointForKUnLabelled2(int k, Set<Long> subgraphIds,
 			Map<Long, Set<Long>> misuseSubgraphCoverage, Map<Long, Set<Long>> correctUseSubgraphCoverage,
