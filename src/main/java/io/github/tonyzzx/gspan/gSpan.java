@@ -84,9 +84,11 @@ public class gSpan {
 	public Set<Integer> uncoveredLabeledGraphs = new HashSet<>();
 	public Map<Integer, Integer> usefulGeneralUnlabelledGraphs = new HashMap<>();
 	public Map<Integer, Integer> usefulSpecificUnlabelledGraphs = new HashMap<>();
-	public Set<Long> frequentUnlabelledSubgraphs = new HashSet<>(); // subgraphs infrequent in labeled set, but frequent in U
+	public Map<Integer, Integer> subgraphForDoubleCheckingUnlabelledGraphs = new HashMap<>();
+	public Set<Long> frequentUnlabelledSubgraphs = new HashSet<>(); // subgraphs infrequent in labeled set, but frequent
+																	// in U
 
-	public Set<Integer> graphsForSubgraphsNeedMoreEvidence = new HashSet<>();
+	public Map<Integer, Integer> graphsForSubgraphsNeedMoreEvidence = new HashMap<>();
 
 	private double theta = 0.0;
 
@@ -98,7 +100,7 @@ public class gSpan {
 	public Map<Long, Set<Integer>> coverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
 	// unlabeledCoverage tracks coverage of U
 	public Map<Long, Set<Integer>> unlabeledCoverage = new HashMap<>(); // map of subgraph id -> set of graphs hit
-	
+
 	public Set<Long> alreadyRequestForMoreLabels = new HashSet<>();
 
 	// debug
@@ -160,48 +162,8 @@ public class gSpan {
 
 		minimalQS = 0.0;
 		theta = minimalQS;
-		
+
 		minimumToLabel = CountingUtils.minimumCountForSignificanceMinority(totalCorrectUses, totalMisuses);
-
-		runIntern();
-
-		LoggingUtils.logTimingStatistics();
-
-	}
-
-	/**
-	 * Run gSpan. The secondary interface
-	 *
-	 * @param writers    FileWriter
-	 * @param minSup     Minimum support
-	 * @param maxNodeNum Maximum number of nodes
-	 * @param minNodeNum Minimum number of nodes
-	 * @throws IOException
-	 */
-	void runIgnoringLabels(ArrayList<Graph> TRANS, FileWriter writers, long minSup, long maxNodeNum, long minNodeNum)
-			throws IOException {
-
-		LoggingUtils.logTimingStatistics();
-
-		os = writers;
-		ID = 0;
-		this.minSup = minSup;
-		maxPat_min = minNodeNum;
-		maxPat_max = maxNodeNum;
-		directed = true;
-
-		this.TRANS = TRANS;
-		long id = 0;
-		for (Graph g : TRANS) {
-			// pretend that all are correct.
-			correctUses.add(Math.toIntExact(id));
-			totalCorrectUses += Math.min(g.quantity, maxGraphCount);
-			quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
-			id++;
-		}
-
-		AWeight = 1;
-		BWeight = 1;
 
 		runIntern();
 
@@ -219,25 +181,25 @@ public class gSpan {
 			if (g.isEmpty())
 				break;
 			if (g.ID != id) {
-				throw new RuntimeException("ID differs at " + g.ID + " (read from file) and " + id + " (determined by increasing number). They have to be the same");
+				throw new RuntimeException("ID differs at " + g.ID + " (read from file) and " + id
+						+ " (determined by increasing number). They have to be the same");
 			}
 			TRANS.add(g);
 			if (g.label == 'M') {
-			
+
 				misuses.add(Math.toIntExact(id));
 				totalMisuses += Math.min(g.quantity, maxGraphCount);
 				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
 
 			} else if (g.label == 'C') {
-		
+
 				correctUses.add(Math.toIntExact(id));
 				totalCorrectUses += Math.min(g.quantity, maxGraphCount);
 				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
 
 			} else if (g.label == 'U') {
-	
-				totalUnlabeled += Math.min(g.quantity, maxGraphCount);
 
+				totalUnlabeled += Math.min(g.quantity, maxGraphCount);
 
 				uncoveredUnlabeledGraphs.add(Math.toIntExact(id)); // first, we add all unlabeled data to
 																	// uncoveredUnlabeledGraphs
@@ -392,7 +354,8 @@ public class gSpan {
 	 * @param projected
 	 * @throws IOException
 	 */
-	private void project(Projected projected, double currentBranchScore, boolean wasSubgraphNearBoundary, int subgraphIDNearBoundary) throws IOException {
+	private void project(Projected projected, double currentBranchScore, boolean wasSubgraphNearBoundary,
+			int subgraphIDNearBoundary) throws IOException {
 		// Check if the pattern is frequent enough.
 		resetCountsOfLabels();
 		int sup = support(projected);
@@ -428,7 +391,7 @@ public class gSpan {
 				B_S1 = countsOfLabels.get(GRAPH_LABEL.MISUSE);
 				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-	
+
 			} else {
 				LoggingUtils.logOnce("Majority class is misuse");
 				// misuses are the majority case, so A is the "Misuse" (M) label
@@ -438,35 +401,59 @@ public class gSpan {
 				B_S1 = countsOfLabels.get(GRAPH_LABEL.CORRECT_USE);
 				U_S0 = totalUnlabeled - countsOfLabels.get(GRAPH_LABEL.UNLABELED);
 				U_S1 = countsOfLabels.get(GRAPH_LABEL.UNLABELED);
-		
+
 			}
 
 			boolean isDebug = false;
 			for (Vertex debugnode : GRAPH_IS_MIN) {
-				if (debugnode.label == 20) { // NumberFormatException
-					System.out.println("=====Found debug node: " + 20);
+				if (debugnode.label == 37) { // String:AES
+					System.out.println("=====Found debug node: " + 37);
 					System.out.println("\tCounts are:");
-					System.out.println("\t" + A_S0 +","+ B_S0+","+ U_S0+","+ A_S1+","+ B_S1 + "," + U_S1);
-					System.out.println("\t\t Proportion: " + ((float)U_S1 / (U_S0 + U_S1)));
+					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
 					isDebug = true;
 				}
+				if (debugnode.label == 6) { // String:DES,6
+					System.out.println("=====Found debug node: " + 6);
+					System.out.println("\tCounts are:");
+					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+					isDebug = true;
+				}
+				if (debugnode.label == 238) { // String:AES/ECB/NoPadding,238
+					System.out.println("=====Found debug node: " + 238);
+					System.out.println("\tCounts are:");
+					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+					isDebug = true;
+				}
+
+				if (debugnode.label == 7) { // Cipher.getInstance(),7
+					System.out.println("=====Found debug node: " + 7);
+					System.out.println("\tCounts are:");
+					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+					isDebug = true;
+				}
+
 			}
 
-			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1, currentBranchScore);
+			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1,
+					currentBranchScore);
 
 			if (isDebug) {
 				System.out.println("\tq_s for debug is:" + q_s);
 			}
 			currentBranchScore = Math.max(q_s, currentBranchScore);
-			
+
 			// low frequency in labeled graphs, but appears frequently in U: might be
 			// important!
 			// these subgraphs have high generality, but we don't know about them yet. Thus,
 			// the user need to label more
-			LoggingUtils.logOnce("Boundary of general-unlabelled: " );
+			LoggingUtils.logOnce("Boundary of general-unlabelled: ");
 			if (A_S1 + B_S1 < 15 && U_S1 >= 0.1 * totalUnlabeled) {
 				frequentUnlabelledSubgraphs.add(ID);
-				
+
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
 					usefulGeneralUnlabelledGraphs.putIfAbsent(unlabeled, 0);
 					usefulGeneralUnlabelledGraphs.put(unlabeled, usefulGeneralUnlabelledGraphs.get(unlabeled) + 1);
@@ -481,7 +468,7 @@ public class gSpan {
 			LoggingUtils.logOnce("Boundary of specific-unlabelled: " + 0.01 * totalUnlabeled);
 			if (A_S1 + B_S1 < 15 && U_S1 >= 5 && U_S1 < 0.1 * totalUnlabeled) { // 10%
 				frequentUnlabelledSubgraphs.add(ID);
-				
+
 				int selected = 0;
 				if (isDebug) {
 					System.out.println("Request for more labels of debugged subgraph");
@@ -493,12 +480,35 @@ public class gSpan {
 
 					usefulSpecificUnlabelledGraphs.putIfAbsent(unlabeled, 0);
 					usefulSpecificUnlabelledGraphs.put(unlabeled, usefulSpecificUnlabelledGraphs.get(unlabeled) + 1);
-					
+
 					selected += 1;
 				}
 			}
-	
-		
+			// if quantity already significant! Try to check if overfitting by comparing
+			// against unlabelled data.
+			// especially on the majority class
+			if (A_S1 > 30) {
+				float expectedUProportion = (float) U_S1 / (U_S1 + U_S0);
+				float majorityProportion = (float) A_S1 / (A_S1 + A_S0);
+
+				int selected = 0;
+				if (Math.abs(majorityProportion - expectedUProportion) > 0.1) { // more than 10%
+					for (Integer unlabeled : unlabeledCoverage.get(ID)) {
+
+						if (selected > 5) {
+							break;
+						}
+
+						subgraphForDoubleCheckingUnlabelledGraphs.putIfAbsent(unlabeled, 0);
+						subgraphForDoubleCheckingUnlabelledGraphs.put(unlabeled,
+								subgraphForDoubleCheckingUnlabelledGraphs.get(unlabeled) + 1);
+
+						selected += 1;
+					}
+
+				}
+			}
+
 			UpperBoundReturnType upperBound = CountingUtils.upperBound(q_s, A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, AWeight,
 					BWeight, UWeight, isDebug);
 			// debug; never prune
@@ -508,47 +518,51 @@ public class gSpan {
 			if (isDebug) {
 				System.out.println("\tupperBound for debug is:" + (upperBound));
 			}
-			
-			if (upperBound == UpperBoundReturnType.BAD_EXPLORE ) {
+
+			if (upperBound == UpperBoundReturnType.BAD_EXPLORE) {
 				// maybe getting more data can help?
-		
+
 				int selected = 0;
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
 					if (selected > minimumToLabel / 2) {
 						break;
 					}
-					graphsForSubgraphsNeedMoreEvidence.add(unlabeled);
+
+					graphsForSubgraphsNeedMoreEvidence.putIfAbsent(unlabeled, 0);
+					graphsForSubgraphsNeedMoreEvidence.put(unlabeled,
+							graphsForSubgraphsNeedMoreEvidence.get(unlabeled) + 1);
 
 					selected += 1;
 				}
-			
+
 			} else if (upperBound == UpperBoundReturnType.BAD && wasSubgraphNearBoundary) {
 				// maybe getting more data can help?
-				
+
 				int selected = 0;
-				if (!alreadyRequestForMoreLabels.contains((long)subgraphIDNearBoundary)) {
-			
-					for (Integer unlabeled : unlabeledCoverage.get((long)subgraphIDNearBoundary)) {
-						if (selected > 5) {
+				if (!alreadyRequestForMoreLabels.contains((long) subgraphIDNearBoundary)) {
+
+					for (Integer unlabeled : unlabeledCoverage.get((long) subgraphIDNearBoundary)) {
+						if (selected > minimumToLabel / 2) {
 							break;
 						}
 						System.out.println("\trequest more labels for:" + subgraphIDNearBoundary);
-						graphsForSubgraphsNeedMoreEvidence.add(unlabeled);
-	
+						graphsForSubgraphsNeedMoreEvidence.putIfAbsent(unlabeled, 0);
+						graphsForSubgraphsNeedMoreEvidence.put(unlabeled,
+								graphsForSubgraphsNeedMoreEvidence.get(unlabeled) + 1);
+
 						selected += 1;
 					}
-					alreadyRequestForMoreLabels.add((long)subgraphIDNearBoundary);
+					alreadyRequestForMoreLabels.add((long) subgraphIDNearBoundary);
 				}
 			}
-			
+
 			if (!wasSubgraphNearBoundary && upperBound == UpperBoundReturnType.GOOD_EXPLORE) {
 				wasSubgraphNearBoundary = true;
 				subgraphIDNearBoundary = (int) ID;
 			}
-			
+
 			++ID; // must increase since this ID was used for `report` and is included in the
 			// subgraphs output
-
 
 			if (upperBound == UpperBoundReturnType.BAD) {
 				System.out.println("\tPruning");
@@ -680,7 +694,7 @@ public class gSpan {
 
 	private double computeQualityTODetermineIfSignificant(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,
 			int A_N, int B_N, double currentBranchScore) {
-		
+
 		int originalSize = selectedSubgraphFeatures.size();
 
 		boolean isRelevant = true;
@@ -707,8 +721,9 @@ public class gSpan {
 				double pValue = test.chiSquareTest(currentCounts);
 				if (pValue > 0.05) {
 					isRelevant = false;
-				} 
-				q_s = -5;
+					q_s = -5;
+				}
+
 			}
 		}
 
@@ -717,11 +732,12 @@ public class gSpan {
 			q_s = CountingUtils.initialFeatureScore(A_S0, A_S1, B_S0, B_S1, U_S0, U_S1, A_N, B_N, AWeight, BWeight,
 					UWeight, ID);
 
-			System.out.println("\t\tq_s is " + q_s + " while theta is " + theta + ", and currentBranchScore=" + currentBranchScore);
-			isRelevant = q_s > theta 
-					&& q_s > currentBranchScore; // only if we beat the more general, smaller, subgraph of this particular subgraph, then we add it.
-					
-			if ( q_s > theta  && q_s <= currentBranchScore) {
+			System.out.println("\t\tq_s is " + q_s + " while theta is " + theta + ", and currentBranchScore="
+					+ currentBranchScore);
+			isRelevant = q_s > theta && q_s > currentBranchScore; // only if we beat the more general, smaller, subgraph
+																	// of this particular subgraph, then we add it.
+
+			if (q_s > theta && q_s <= currentBranchScore) {
 				System.out.println("Reject due to similar score as subgraph");
 			}
 		}
@@ -766,11 +782,12 @@ public class gSpan {
 			} else {
 				theta = 0;
 			}
-						
+
 			// set theta is equals to 0 if we want all the good subgraphs.
 
 			if (selectedSubgraphFeatures.containsKey(ID)) {
-				throw new RuntimeException("iterating into the same subgraph ID again!/Reusing an existing subgraph ID " + ID);
+				throw new RuntimeException(
+						"iterating into the same subgraph ID again!/Reusing an existing subgraph ID " + ID);
 			}
 
 			selectedSubgraphFeatures.put(ID, q_s);

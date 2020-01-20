@@ -50,7 +50,7 @@ public class CountingUtils {
 	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, int A_N,
 			int B_N, double AWeight, double BWeight, double UWeight, long ID) {
 
-		System.out.println("\t==debug==");
+		System.out.println("\t==getting score==");
 		System.out.print("\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
 
 		double expectedRatio = AWeight / (AWeight + BWeight);
@@ -66,7 +66,7 @@ public class CountingUtils {
 			System.out.println("\t\t" + ID + " would be accepted if not for the distribution penalty!");
 			System.out.println("\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
 		}
-		
+
 //		long[][] currentCounts = { { A_S1, A_S0 }, { B_S1, B_S0 } };
 //		ChiSquareTest test = new ChiSquareTest();
 //		
@@ -172,7 +172,7 @@ public class CountingUtils {
 
 		long[][] bestCounts1 = { { A_S1, A_S0 }, { 0, B_S0 + B_S1 } };
 		double bestPValue1 = test.chiSquareTest(bestCounts1);
-		if (Double.isNaN(bestPValue1)) { // can reach Nan if aA_S1 was already 0 
+		if (Double.isNaN(bestPValue1)) { // can reach Nan if aA_S1 was already 0
 			bestPValue1 = currentPValue;
 		}
 
@@ -181,12 +181,12 @@ public class CountingUtils {
 		if (Double.isNaN(bestPValue2)) {// can reach Nan if B_S1 was already 0
 			bestPValue2 = currentPValue;
 		}
-		
+
 		if (bestPValue1 > 0.1 && bestPValue2 > 0.1) { // best case still bad
 			System.out.println("\tBest case still bad. Current p-value=" + currentPValue);
 			System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
 			System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
-			System.out.println("p values can become, at best, " + bestPValue1 + " or " + bestPValue2);
+			System.out.println("\t\tp values can become, at best, " + bestPValue1 + " or " + bestPValue2);
 
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
@@ -216,14 +216,15 @@ public class CountingUtils {
 			}
 		} else {
 			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
-				System.out.println("\tNot pruning, but should remember to ask for more labels. p-value=" + currentPValue);
+				System.out
+						.println("\tNot pruning, but should remember to ask for more labels. p-value=" + currentPValue);
 				System.out.println("\t\tRemmeber to ask for more: A_S0=" + A_S0 + " , A_S1=" + A_S1);
 				System.out.println("\t\tRemmeber to ask for more: B_S0=" + B_S0 + " , B_S1=" + B_S1);
 				return UpperBoundReturnType.GOOD_EXPLORE;
 			} else {
 				return UpperBoundReturnType.GOOD;
 			}
-			
+
 		}
 	}
 
@@ -235,24 +236,24 @@ public class CountingUtils {
 				|| (Double.isNaN(a) && Double.isNaN(b));
 	}
 
-	
 	public static int minimumCountForSignificanceMinority(int classACounts, int classBCounts) {
 		ChiSquareTest test = new ChiSquareTest();
 
 		int majorityCount = classACounts > classBCounts ? classACounts : classBCounts;
 		int minorityCount = classACounts > classBCounts ? classBCounts : classACounts;
-		
+
 		for (int i = 0; i < minorityCount; i++) {
 			long[][] currentCounts = { { 0, majorityCount }, { i, minorityCount - i } };
 			double currentPValue = test.chiSquareTest(currentCounts);
 			if (currentPValue < 0.05) {
+				LoggingUtils.logOnce("MINIMUM COUNT FOR signifance in the minority class=" + i);
 				return i;
 			}
 		}
-		
+
 		throw new RuntimeException("Impossible!");
 	}
-	
+
 	// actually we don't have to do this for all subgraphs.
 	public static Map<Long, Double> findClosestLabelledPointForKUnLabelled2(int k, Set<Long> subgraphIds,
 			Map<Long, Set<Long>> misuseSubgraphCoverage, Map<Long, Set<Long>> correctUseSubgraphCoverage,
@@ -397,6 +398,56 @@ public class CountingUtils {
 		return result;
 	}
 
+	public static void writeUnlabelledGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> labeledCoverage, 
+			Map<Long, Set<Integer>> unlabeledCoverage,
+			BufferedWriter writer) throws IOException {
+		System.out.println("\tConsolidating and writing graph and their subgraph features");
+
+		if (labeledCoverage.size() != gSpan.selectedSubgraphFeatures.size()) {
+			
+			
+			throw new RuntimeException("wrong size!");
+		}
+
+		List<Integer> graphs = new ArrayList<>();
+		for (Entry<Long, Set<Integer>> entry : unlabeledCoverage.entrySet()) {
+			graphs.addAll(entry.getValue());
+		}
+
+		List<Long> features = labeledCoverage.keySet().stream().sorted().collect(Collectors.toList());
+		writer.write("graph_id,is_correct");
+		for (Long feature : features) {
+			writer.write(",feature_" + feature);
+		}
+		writer.write("\n");
+
+		System.out.println("\tWriting to unlabelled feature vector file");
+
+		// <graph id>, is_correct, feature_1, feature_2, feature_3, ... \n
+		for (Integer graph : graphs) {
+
+			for (int graphNum = 0; graphNum < 1; graphNum++) {
+				int timesToRepeat = 1;
+				for (int repeated = 0; repeated < timesToRepeat; repeated++) {
+
+					writer.write(graph + "_" + graphNum + "_" + repeated + ",");
+
+					writer.write("?");
+
+					for (Long feature : features) {
+						if (unlabeledCoverage.get(feature).contains(graph)) {
+							writer.write(",1");
+						} else {
+							writer.write(",0");
+						}
+					}
+					writer.write("\n");
+				}
+			}
+		}
+
+	}
+
 	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, BufferedWriter writer)
 			throws IOException {
 		System.out.println("\tConsolidating and writing graph and their subgraph features");
@@ -412,7 +463,6 @@ public class CountingUtils {
 		graphs.addAll(gSpan.correctUses);
 		graphs.addAll(gSpan.misuses);
 
-		// hmm, what about graphs completely uncovered??
 		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
 
 		writer.write("graph_id,is_correct");
