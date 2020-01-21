@@ -406,30 +406,44 @@ public class gSpan {
 
 			boolean isDebug = false;
 			for (Vertex debugnode : GRAPH_IS_MIN) {
-				if (debugnode.label == 37) { // String:AES
-					System.out.println("=====Found debug node: " + 37);
+//				if (debugnode.label == 37) { // String:AES
+//					System.out.println("=====Found debug node: " + 37);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+//				if (debugnode.label == 6) { // String:DES,6
+//					System.out.println("=====Found debug node: " + 6);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+//				if (debugnode.label == 238) { // String:AES/ECB/NoPadding,238
+//					System.out.println("=====Found debug node: " + 238);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+//
+//				if (debugnode.label == 7) { // Cipher.getInstance(),7
+//					System.out.println("=====Found debug node: " + 7);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+				if (debugnode.label == 3230) {
+					System.out.println("=====Found debug node: " + 3230);
 					System.out.println("\tCounts are:");
 					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
 					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
 					isDebug = true;
 				}
-				if (debugnode.label == 6) { // String:DES,6
-					System.out.println("=====Found debug node: " + 6);
-					System.out.println("\tCounts are:");
-					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-					isDebug = true;
-				}
-				if (debugnode.label == 238) { // String:AES/ECB/NoPadding,238
-					System.out.println("=====Found debug node: " + 238);
-					System.out.println("\tCounts are:");
-					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-					isDebug = true;
-				}
-
-				if (debugnode.label == 7) { // Cipher.getInstance(),7
-					System.out.println("=====Found debug node: " + 7);
+				if (debugnode.label == 11) {
+					System.out.println("=====Found debug node: " + 11);
 					System.out.println("\tCounts are:");
 					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
 					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));

@@ -33,11 +33,9 @@ public class Main {
 				gSpan gSpan = new gSpan();
 				System.out.println("gSpan is mining...");
 				gSpan.run(reader, writer, arguments.minSup, arguments.maxNodeNum, arguments.minNodeNum);
-				
-				
+
 				System.out.println("It's done! The result is in  " + arguments.outFilePath + " .");
 
-				
 				postprocess(arguments, gSpan);
 			}
 		}
@@ -45,37 +43,72 @@ public class Main {
 	}
 
 	private static void postprocess(Arguments arguments, gSpan gSpan) throws IOException {
-		
-		
-		
-		Map<Long, Double> sortedSubgraphFeatures = 
-				gSpan.selectedSubgraphFeatures.entrySet().stream()
-			    .sorted(Entry.comparingByValue())
-			    .collect(Collectors.toMap(Entry::getKey, Entry::getValue,
-			                              (e1, e2) -> e1, LinkedHashMap::new));
-//		gSpan.coverage
-		Set<Integer> thingsToCover = new HashSet<>(gSpan.misuses);
-		thingsToCover.addAll(gSpan.correctUses);
-		
+
+		Map<Long, Double> sortedSubgraphFeatures = gSpan.selectedSubgraphFeatures.entrySet().stream()
+				.sorted(Entry.comparingByValue())
+				.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+
+		// what really matters is unique identifiability
+		Set<Integer> misusesToCover = new HashSet<>(gSpan.misuses);
+		Set<Integer> correctUsesToCover = new HashSet<>(gSpan.correctUses);
+
+		// impureCases: track the cases we can't really distinguish yet.
+		Set<Integer> impureCases = new HashSet<>();
+
+//		Set<Integer> thingsToCover= new HashSet<>(gSpan.misuses);
+//		thingsToCover.addAll(gSpan.correctUses);
+//		
 		Set<Long> weakSubgraphFeatures = new HashSet<>();
 		for (Map.Entry<Long, Double> entry : sortedSubgraphFeatures.entrySet()) {
 			Long featureId = entry.getKey();
-			Set<Integer> thingsSubgraphCovers = gSpan.coverage.get(featureId);
-			thingsSubgraphCovers.retainAll(thingsToCover);
-			
-			if (thingsSubgraphCovers.isEmpty()) {
+
+			Set<Integer> misuseSubgraphCovers = new HashSet<>(gSpan.coverage.get(featureId));
+			misuseSubgraphCovers.retainAll(misusesToCover);
+
+			Set<Integer> correctUseSubgraphCovers = new HashSet<>(gSpan.coverage.get(featureId));
+			correctUseSubgraphCovers.retainAll(correctUsesToCover);
+
+			// even if it doesn't cover new ground, but if it helps us distinguish old
+			// confusing cases, then we want it too
+			Set<Integer> impureCovers = new HashSet<>(gSpan.coverage.get(featureId));
+			impureCovers.retainAll(impureCases);
+
+//			boolean isUniquelyCovers = misuseSubgraphCovers.isEmpty() || correctUseSubgraphCovers.isEmpty();
+
+			boolean isWeak = misuseSubgraphCovers.isEmpty() && correctUseSubgraphCovers.isEmpty()
+					&& impureCovers.isEmpty();
+
+			if (isWeak) {
 				weakSubgraphFeatures.add(featureId);
+			} else {
+				// pick stronger category
+				if (gSpan.totalCorrectUses > gSpan.totalMisuses) {
+					if (gSpan.AWeight * correctUseSubgraphCovers.size() > gSpan.BWeight * misuseSubgraphCovers.size()) {
+						// only cover correct, ignoring cases already covered by other features
+						correctUsesToCover.removeAll(correctUseSubgraphCovers);
+						impureCovers.removeAll(correctUseSubgraphCovers);
+						impureCases.addAll(misuseSubgraphCovers);
+					}
+				} else {
+					if (gSpan.AWeight * misuseSubgraphCovers.size() > gSpan.BWeight * correctUseSubgraphCovers.size()) {
+						// only cover misuse, ignoring cases already covered by other features
+						misusesToCover.removeAll(misuseSubgraphCovers);
+						impureCovers.removeAll(misuseSubgraphCovers);
+						impureCases.addAll(correctUseSubgraphCovers);
+					}
+
+				}
+
 			}
-			
-			thingsToCover.removeAll(thingsSubgraphCovers);
+
 		}
-		
+
 		// remove the lame features
 		for (long weakFeature : weakSubgraphFeatures) {
 			gSpan.selectedSubgraphFeatures.remove(weakFeature);
 			gSpan.coverage.remove(weakFeature);
 		}
-		
+
 		try (BufferedWriter selectedSubGraphWriter = new BufferedWriter(
 				new FileWriter(arguments.outFilePath + "_best_subgraphs.txt"))) {
 			for (Map.Entry<Long, Double> subgraphFeature : gSpan.selectedSubgraphFeatures.entrySet()) {
@@ -85,14 +118,13 @@ public class Main {
 		}
 
 		// print subgraph features
-		System.out.println("The identified discriminative subgraphs are in  " + arguments.outFilePath
-				+ "_best_subgraphs.txt");
+		System.out.println(
+				"The identified discriminative subgraphs are in  " + arguments.outFilePath + "_best_subgraphs.txt");
 		try (BufferedWriter featuresWriter = new BufferedWriter(
 				new FileWriter(arguments.outFilePath + "_features.txt"))) {
 			CountingUtils.writeGraphFeatures(gSpan, gSpan.coverage, featuresWriter);
 		}
-		System.out.println(
-				"The feature vectors of labeled graphs are in " + arguments.outFilePath + "_features.txt");
+		System.out.println("The feature vectors of labeled graphs are in " + arguments.outFilePath + "_features.txt");
 
 		try (BufferedWriter featuresWriter = new BufferedWriter(
 				new FileWriter(arguments.outFilePath + "_unlabelled_features.txt"))) {
@@ -101,7 +133,6 @@ public class Main {
 		System.out.println(
 				"The feature vectors of unlabeled graphs are in " + arguments.outFilePath + "_unlabelled_features.txt");
 
-		
 		// find new examples to label
 		System.out.println("Computing which unlabeled graphs were not covered");
 		System.out.println("\tand which labeled graphs were not covered");
@@ -133,8 +164,7 @@ public class Main {
 			System.out.println("no need for vanillas");
 		}
 
-		int minimumToLabel = Math.max(
-				3,
+		int minimumToLabel = Math.max(3,
 				CountingUtils.minimumCountForSignificanceMinority(gSpan.totalCorrectUses, gSpan.totalMisuses));
 		try (BufferedWriter unlabeledNeedsLabelsWriter = new BufferedWriter(
 				new FileWriter(arguments.outFilePath + "_interesting_unlabeled.txt"))) {
@@ -146,12 +176,11 @@ public class Main {
 			System.out.println("\t" + "# uncoveredUnlabeledGraphs: " + gSpan.uncoveredUnlabeledGraphs.size());
 
 			List<Integer> top = gSpan.usefulGeneralUnlabelledGraphs.values().stream()
-					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
-					.sorted(Collections.reverseOrder()).collect(Collectors.toList());
+					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item)).sorted(Collections.reverseOrder())
+					.collect(Collectors.toList());
 
 			System.out.println("\t" + "hits on U - usefulGeneralUnlabelledGraphs");
-			System.out.println(
-					"\t" + "# usefulGeneralUnlabelledGraphs: " + gSpan.usefulGeneralUnlabelledGraphs.size());
+			System.out.println("\t" + "# usefulGeneralUnlabelledGraphs: " + gSpan.usefulGeneralUnlabelledGraphs.size());
 			System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 50)));
 
 			int writingCount = 0;
@@ -175,8 +204,8 @@ public class Main {
 //        					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
 					.sorted(Collections.reverseOrder()).collect(Collectors.toList());
 			System.out.println("\thits on U - usefulSpecificUnlabelledGraphs");
-			System.out.println(
-					"\t" + "# usefulSpecificUnlabelledGraphs: " + gSpan.usefulSpecificUnlabelledGraphs.size());
+			System.out
+					.println("\t" + "# usefulSpecificUnlabelledGraphs: " + gSpan.usefulSpecificUnlabelledGraphs.size());
 			System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 100)));
 			for (Entry<Integer, Integer> entry : gSpan.usefulSpecificUnlabelledGraphs.entrySet()) {
 				Integer graphId = entry.getKey();
@@ -195,10 +224,9 @@ public class Main {
 					writingCount += 1;
 				}
 			}
-			System.out.println("\t\t\tWritten " + writingCount
-					+ " (accumulative count) for specific unlabelled subgraphs");
-			
-			
+			System.out.println(
+					"\t\t\tWritten " + writingCount + " (accumulative count) for specific unlabelled subgraphs");
+
 			for (Entry<Integer, Integer> entry : gSpan.subgraphForDoubleCheckingUnlabelledGraphs.entrySet()) {
 				Integer graphId = entry.getKey();
 //        				if (!gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
@@ -207,16 +235,15 @@ public class Main {
 //        				
 				unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
 				writingCount += 1;
-				
+
 			}
-			
-			System.out.println("\t\t\tWritten " + writingCount
-					+ " (accumulative count) for graph-for-double-checking subgraphs");
-			
+
+			System.out.println(
+					"\t\t\tWritten " + writingCount + " (accumulative count) for graph-for-double-checking subgraphs");
 
 			Map<Integer, Integer> graphsForSubgraphsNeedMoreEvidence = gSpan.graphsForSubgraphsNeedMoreEvidence
-					.entrySet().stream().sorted(Entry.comparingByValue()).collect(Collectors
-							.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+					.entrySet().stream().sorted(Entry.comparingByValue())
+					.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 			int needMoreEvidenceCount = 0;
 			for (int needMoreEvidenceGraph : graphsForSubgraphsNeedMoreEvidence.keySet()) {
 				if (needMoreEvidenceCount > 30) {
