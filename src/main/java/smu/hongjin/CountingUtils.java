@@ -448,7 +448,7 @@ public class CountingUtils {
 
 	}
 
-	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, BufferedWriter writer)
+	public static void writeGraphFeatures(gSpan gSpan, Map<Long, Set<Integer>> coverage, Map<Long, Double> sortedSubgraphFeatures, BufferedWriter writer)
 			throws IOException {
 		System.out.println("\tConsolidating and writing graph and their subgraph features");
 
@@ -457,38 +457,72 @@ public class CountingUtils {
 		}
 
 		List<Integer> graphs = new ArrayList<>();
-		for (Entry<Long, Set<Integer>> entry : coverage.entrySet()) {
-			graphs.addAll(entry.getValue());
-		}
+
 		graphs.addAll(gSpan.correctUses);
 		graphs.addAll(gSpan.misuses);
+		
+		System.out.println("correct sz " + gSpan.correctUses.size());
+		System.out.println("misuses sz " + gSpan.misuses.size());
+		
+		System.out.println("graphs sz " + graphs.size()); // graphs are different!!
 
-		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
-
+//		List<Long> features = coverage.keySet().stream().sorted().collect(Collectors.toList());
+		
+		List<Long> features = new ArrayList<>(sortedSubgraphFeatures.keySet());
+		
 		writer.write("graph_id,is_correct");
 		for (Long feature : features) {
+			if (!coverage.containsKey(feature)) {
+				continue;
+			}
 			writer.write(",feature_" + feature);
 		}
 		writer.write("\n");
 
 		// amplify minority class
+		int numCorrect = 0;
+		int numMisuses = 0;
+		for (Integer graph : graphs) {
+			if (gSpan.misuses.contains(graph)) {
+				numMisuses += gSpan.quantities.get(graph);
+			} else if (gSpan.correctUses.contains(graph)) {
+				numCorrect += gSpan.quantities.get(graph);
+			}
+		}
+		
 		int repeatMisuses;
 		int repeatCorrect;
-		if (gSpan.correctUses.size() > gSpan.misuses.size()) {
+		if (numCorrect > numMisuses) {
 			repeatCorrect = 1;
-			repeatMisuses = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalCorrectUses / gSpan.totalMisuses)));
+			repeatMisuses = Math.toIntExact(Math.round(Math.ceil((float) numCorrect / numMisuses)));
 //			repeatMisuses = 1;
 		} else {
 			repeatMisuses = 1;
-			repeatCorrect = Math.toIntExact(Math.round(Math.ceil((float) gSpan.totalMisuses / gSpan.totalCorrectUses)));
+			repeatCorrect = Math.toIntExact(Math.round(Math.ceil((float) numMisuses / numCorrect)));
 //			repeatCorrect = 1;
 		}
 
 		System.out.println("\tWriting to feature vector file");
 		System.out.println("\tRepeating; repeatCorrect= " + repeatCorrect + " , and repeatMisuses=" + repeatMisuses);
 
+		int debugUniqGraphCountMisuses = 0;
+		int debugUniqGraphCountCorrects = 0;
+		int debugGraphCountMisuses = 0;
+		int debugGraphCountCorrects = 0;
+		
+		// ok, so we know misuses and correctUses remain constant.
+		System.out.println("gSpan.misuses sz" + gSpan.misuses.size());
+		System.out.println("gSpan.correctUses sz" + gSpan.correctUses.size());
+		
 		// <graph id>, is_correct, feature_1, feature_2, feature_3, ... \n
 		for (Integer graph : graphs) {
+			if (gSpan.misuses.contains(graph)) {
+				debugUniqGraphCountMisuses += 1;
+				debugGraphCountMisuses += gSpan.quantities.get(graph);
+			} else if (gSpan.correctUses.contains(graph)) {
+				debugUniqGraphCountCorrects += 1;
+				debugGraphCountCorrects += gSpan.quantities.get(graph);
+			}
 
 			for (int graphNum = 0; graphNum < gSpan.quantities.get(graph); graphNum++) {
 				boolean isCorrect = gSpan.correctUses.contains(graph);
@@ -508,6 +542,9 @@ public class CountingUtils {
 					}
 
 					for (Long feature : features) {
+						if (!coverage.containsKey(feature)) {
+							continue;
+						}
 						if (coverage.get(feature).contains(graph)) {
 							writer.write(",1");
 						} else {
@@ -519,6 +556,10 @@ public class CountingUtils {
 			}
 		}
 
+		System.out.println("debugUniqGraphCountMisuses : " + debugUniqGraphCountMisuses);
+		System.out.println("debugUniqGraphCountCorrects : " + debugUniqGraphCountCorrects);
+		System.out.println("debugGraphCountMisuses : " + debugGraphCountMisuses);
+		System.out.println("debugGraphCountCorrects : " + debugGraphCountCorrects);
 		System.out.println("\tCompleted consolidation and writing");
 	}
 

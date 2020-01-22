@@ -188,14 +188,22 @@ public class gSpan {
 			if (g.label == 'M') {
 
 				misuses.add(Math.toIntExact(id));
-				totalMisuses += Math.min(g.quantity, maxGraphCount);
-				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
+				int qty = Math.min(g.quantity, maxGraphCount);
+				totalMisuses += qty;
+				quantities.put(Math.toIntExact(id), qty);
 
+				if (qty <= 0) {
+					throw new RuntimeException("invalid qty " + qty);
+				}
 			} else if (g.label == 'C') {
 
 				correctUses.add(Math.toIntExact(id));
-				totalCorrectUses += Math.min(g.quantity, maxGraphCount);
-				quantities.put(Math.toIntExact(id), Math.min(g.quantity, maxGraphCount));
+				int qty = Math.min(g.quantity, maxGraphCount);
+				totalCorrectUses += qty;
+				quantities.put(Math.toIntExact(id), qty);
+				if (qty <= 0) {
+					throw new RuntimeException("invalid qty " + qty);
+				}
 
 			} else if (g.label == 'U') {
 
@@ -213,6 +221,9 @@ public class gSpan {
 			id++;
 		}
 		read.close();
+		
+		System.out.println("correct sz " + correctUses.size());
+		System.out.println("misuses sz " + misuses.size());
 	}
 
 	private void runIntern() throws IOException {

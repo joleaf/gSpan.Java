@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
@@ -44,10 +45,19 @@ public class Main {
 	}
 
 	private static void postprocess(Arguments arguments, gSpan gSpan) throws IOException {
+		
+		List<Integer> graphs = new ArrayList<>();
+		for (Entry<Long, Set<Integer>> entry : gSpan.coverage.entrySet()) {
+			graphs.addAll(entry.getValue());
+		}
+		graphs.addAll(gSpan.correctUses);
+		graphs.addAll(gSpan.misuses);
+		
+		System.out.println("graphs sz " + graphs.size()); // graphs are different!!
 
 		Map<Long, Double> sortedSubgraphFeatures = gSpan.selectedSubgraphFeatures.entrySet().stream()
-//				.sorted(Entry.comparingByValue(Comparator.reverseOrder()))
-				.sorted(Entry.comparingByValue())
+				.sorted(Entry.comparingByValue(Comparator.reverseOrder()))
+//				.sorted(Entry.comparingByValue())
 				.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
 		// what really matters is unique identifiability
@@ -75,19 +85,27 @@ public class Main {
 			Set<Integer> impureCovers = new HashSet<>(gSpan.coverage.get(featureId));
 			impureCovers.retainAll(impureCases);
 
-			boolean isWeak;
-			// pick stronger category
+			// the idea is that as we enumerate the features, we 'cover' the labeled data
+			// we are less interested in features that merely cover the same data
+			// but features that can disambiguite a previously confusing case is fine
+			boolean isWeak = true;
+			
 			System.out.println("Feature selection");
 			System.out.println("\tfeatureId: " + featureId);
+			
+			boolean isImpureCovered = impureCases.removeAll(gSpan.coverage.get(featureId));
+			if (isImpureCovered) {
+				System.out.println("\tcovered impure cases");
+				isWeak = false;
+			}
 
+			// pick stronger category
 			if (gSpan.totalCorrectUses > gSpan.totalMisuses) {
 				if (gSpan.AWeight * correctUseSubgraphCovers.size() > gSpan.BWeight * misuseSubgraphCovers.size()) {
 					// only cover correct, ignoring cases already covered by other features
 
 					System.out.println("\tcovering correct cases of size " + correctUseSubgraphCovers.size());
-					System.out.println("\timpure cases size:" + impureCases.size());
 					boolean hasChanged = correctUsesToCover.removeAll(correctUseSubgraphCovers);
-					hasChanged |= impureCases.removeAll(correctUseSubgraphCovers);
 
 					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
 					for (int misuseSubgraphCover : misuseSubgraphCovers) {
@@ -95,16 +113,14 @@ public class Main {
 							impureCases.add(misuseSubgraphCover);
 						}
 					}
-					isWeak = !hasChanged;
+					isWeak &= !hasChanged;
 
 					System.out.println("\timpure cases size after covering:" + impureCases.size());
 				} else {
 					// only cover misuses, ignoring cases already covered by other features
 
 					System.out.println("\tcovering misuse cases of size " + misuseSubgraphCovers.size());
-					System.out.println("\timpure cases size:" + impureCases.size());
 					boolean hasChanged = misusesToCover.removeAll(misuseSubgraphCovers);
-					hasChanged |= impureCases.removeAll(misuseSubgraphCovers);
 
 					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
 					for (int correctSubgraphCover : correctUseSubgraphCovers) {
@@ -113,7 +129,7 @@ public class Main {
 							
 						}
 					}
-					isWeak = !hasChanged;
+					isWeak &= !hasChanged;
 					
 					System.out.println("\timpure cases size after covering:" + impureCases.size());
 				}
@@ -122,10 +138,8 @@ public class Main {
 					// only cover misuse, ignoring cases already covered by other features
 
 					System.out.println("\tcovering misuse cases of size " + misuseSubgraphCovers.size());
-					System.out.println("\timpure cases size:" + impureCases.size());
 
 					boolean hasChanged =misusesToCover.removeAll(misuseSubgraphCovers);
-					hasChanged |= impureCases.removeAll(misuseSubgraphCovers);
 
 					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
 					for (int correctSubgraphCover : correctUseSubgraphCovers) {
@@ -134,16 +148,14 @@ public class Main {
 							
 						}
 					}
-					isWeak = !hasChanged;
+					isWeak &= !hasChanged;
 					
 					System.out.println("\timpure cases size after covering:" + impureCases.size());
 				} else {
 					// only cover correct, ignoring cases already covered by other features
 
 					System.out.println("\tcovering correct cases of size " + correctUseSubgraphCovers.size());
-					System.out.println("\timpure cases size:" + impureCases.size());
 					boolean hasChanged =correctUsesToCover.removeAll(correctUseSubgraphCovers);
-					hasChanged |= impureCases.removeAll(correctUseSubgraphCovers);
 
 					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
 					for (int misuseSubgraphCover : misuseSubgraphCovers) {
@@ -152,11 +164,13 @@ public class Main {
 							
 						}
 					}
-					isWeak = !hasChanged;
+					isWeak &= !hasChanged;
 					
 					System.out.println("\timpure cases size after covering:" + impureCases.size());
 				}
 			}
+			
+
 			if (isWeak) {
 				weakSubgraphFeatures.add(featureId);
 			}
@@ -170,7 +184,13 @@ public class Main {
 
 		try (BufferedWriter selectedSubGraphWriter = new BufferedWriter(
 				new FileWriter(arguments.outFilePath + "_best_subgraphs.txt"))) {
-			for (Map.Entry<Long, Double> subgraphFeature : gSpan.selectedSubgraphFeatures.entrySet()) {
+			for (Map.Entry<Long, Double> subgraphFeature : sortedSubgraphFeatures.entrySet()) {
+				if (!gSpan.coverage.containsKey(subgraphFeature.getKey())) {
+					if (!weakSubgraphFeatures.contains(subgraphFeature.getKey())) {
+						throw new RuntimeException("huhhh");
+					}
+					continue; // we have removed this weak feature
+				}
 				selectedSubGraphWriter.write(subgraphFeature.getKey() + "," + subgraphFeature.getValue());
 				selectedSubGraphWriter.write("\n");
 			}
@@ -181,7 +201,7 @@ public class Main {
 				"The identified discriminative subgraphs are in  " + arguments.outFilePath + "_best_subgraphs.txt");
 		try (BufferedWriter featuresWriter = new BufferedWriter(
 				new FileWriter(arguments.outFilePath + "_features.txt"))) {
-			CountingUtils.writeGraphFeatures(gSpan, gSpan.coverage, featuresWriter);
+			CountingUtils.writeGraphFeatures(gSpan, gSpan.coverage, sortedSubgraphFeatures, featuresWriter);
 		}
 		System.out.println("The feature vectors of labeled graphs are in " + arguments.outFilePath + "_features.txt");
 
