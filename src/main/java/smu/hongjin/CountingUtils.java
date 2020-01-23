@@ -498,7 +498,7 @@ public class CountingUtils {
 //			repeatMisuses = 1;
 		} else {
 			repeatMisuses = 1;
-			repeatCorrect = Math.toIntExact(Math.round(Math.ceil((float) numMisuses / numCorrect)));
+			repeatCorrect = Math.toIntExact(Math.round(Math.floor((float) numMisuses / numCorrect)));
 //			repeatCorrect = 1;
 		}
 

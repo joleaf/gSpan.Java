@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -47,11 +48,17 @@ public class Main {
 	private static void postprocess(Arguments arguments, gSpan gSpan) throws IOException {
 		
 		List<Integer> graphs = new ArrayList<>();
-		for (Entry<Long, Set<Integer>> entry : gSpan.coverage.entrySet()) {
-			graphs.addAll(entry.getValue());
-		}
+//		for (Entry<Long, Set<Integer>> entry : gSpan.coverage.entrySet()) {
+//			graphs.addAll(entry.getValue());
+//		}
 		graphs.addAll(gSpan.correctUses);
 		graphs.addAll(gSpan.misuses);
+		
+		Map<Integer, Set<Long>> graphsToFeaturesContained = new HashMap<>();
+		
+		for (int graph : graphs) {
+			graphsToFeaturesContained.putIfAbsent(graph, new HashSet<>());
+		}
 		
 		System.out.println("graphs sz " + graphs.size()); // graphs are different!!
 
@@ -60,119 +67,65 @@ public class Main {
 //				.sorted(Entry.comparingByValue())
 				.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
-		// what really matters is unique identifiability
-		Set<Integer> misusesToCover = new HashSet<>(gSpan.misuses);
-		Set<Integer> correctUsesToCover = new HashSet<>(gSpan.correctUses);
 
-		// impureCases: track the cases we can't really distinguish yet.
-		Set<Integer> impureCases = new HashSet<>();
 
-//		Set<Integer> thingsToCover= new HashSet<>(gSpan.misuses);
-//		thingsToCover.addAll(gSpan.correctUses);
-//		
+		
 		Set<Long> weakSubgraphFeatures = new HashSet<>();
+		
+		int previousCorkScore = Integer.MAX_VALUE;
 		for (Map.Entry<Long, Double> entry : sortedSubgraphFeatures.entrySet()) {
 			Long featureId = entry.getKey();
 
-			Set<Integer> misuseSubgraphCovers = new HashSet<>(gSpan.coverage.get(featureId));
-			misuseSubgraphCovers.retainAll(misusesToCover);
+			Set<Integer> subgraphCovers = new HashSet<>(gSpan.coverage.get(featureId));
+			
+			for (Integer graph : subgraphCovers) {
+				graphsToFeaturesContained.get(graph).add(featureId);
+			}
+			
+			// see if the number of graphs that cannot be disambiguated has decreased?
+			// if so, the subgraph is not weak
+			// otherwise, drop this subgraph
+			
+			int corkScore = 0;
+			
+			
+			for (int i = 0; i < graphs.size(); i++) {
+				int graph1 = graphs.get(i);
+				Set<Long> features1 = graphsToFeaturesContained.get(graph1);
+				boolean isMisuse1 = gSpan.misuses.contains(graph1);
 
-			Set<Integer> correctUseSubgraphCovers = new HashSet<>(gSpan.coverage.get(featureId));
-			correctUseSubgraphCovers.retainAll(correctUsesToCover);
-
-			// even if it doesn't cover new ground, but if it helps us distinguish old
-			// confusing cases, then we want it too
-			Set<Integer> impureCovers = new HashSet<>(gSpan.coverage.get(featureId));
-			impureCovers.retainAll(impureCases);
-
-			// the idea is that as we enumerate the features, we 'cover' the labeled data
-			// we are less interested in features that merely cover the same data
-			// but features that can disambiguite a previously confusing case is fine
+				for (int j = i + 1; j < graphs.size(); j++) {
+					int graph2 = graphs.get(j);
+					
+					boolean isMisuse2 = gSpan.misuses.contains(graph2);
+					
+					if (isMisuse1 == isMisuse2) {
+						continue;
+					}
+					
+					Set<Long> intersection = new HashSet<>(graphsToFeaturesContained.get(graph2));
+					intersection.retainAll(features1);
+					
+					if (intersection.size() == features1.size()) { // cannot disambiguate
+						corkScore += 1;
+					}
+				}
+			}
+			
 			boolean isWeak = true;
-			
-			System.out.println("Feature selection");
-			System.out.println("\tfeatureId: " + featureId);
-			
-			boolean isImpureCovered = impureCases.removeAll(gSpan.coverage.get(featureId));
-			if (isImpureCovered) {
-				System.out.println("\tcovered impure cases");
+			if (corkScore < previousCorkScore) {
 				isWeak = false;
 			}
+			previousCorkScore = corkScore;
 
-			// pick stronger category
-			if (gSpan.totalCorrectUses > gSpan.totalMisuses) {
-				if (gSpan.AWeight * correctUseSubgraphCovers.size() > gSpan.BWeight * misuseSubgraphCovers.size()) {
-					// only cover correct, ignoring cases already covered by other features
-
-					System.out.println("\tcovering correct cases of size " + correctUseSubgraphCovers.size());
-					boolean hasChanged = correctUsesToCover.removeAll(correctUseSubgraphCovers);
-
-					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
-					for (int misuseSubgraphCover : misuseSubgraphCovers) {
-						if (misusesToCover.contains(misuseSubgraphCover)) {
-							impureCases.add(misuseSubgraphCover);
-						}
-					}
-					isWeak &= !hasChanged;
-
-					System.out.println("\timpure cases size after covering:" + impureCases.size());
-				} else {
-					// only cover misuses, ignoring cases already covered by other features
-
-					System.out.println("\tcovering misuse cases of size " + misuseSubgraphCovers.size());
-					boolean hasChanged = misusesToCover.removeAll(misuseSubgraphCovers);
-
-					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
-					for (int correctSubgraphCover : correctUseSubgraphCovers) {
-						if (correctUsesToCover.contains(correctSubgraphCover)) {
-							impureCases.add(correctSubgraphCover);
-							
-						}
-					}
-					isWeak &= !hasChanged;
-					
-					System.out.println("\timpure cases size after covering:" + impureCases.size());
-				}
-			} else {
-				if (gSpan.AWeight * misuseSubgraphCovers.size() > gSpan.BWeight * correctUseSubgraphCovers.size()) {
-					// only cover misuse, ignoring cases already covered by other features
-
-					System.out.println("\tcovering misuse cases of size " + misuseSubgraphCovers.size());
-
-					boolean hasChanged =misusesToCover.removeAll(misuseSubgraphCovers);
-
-					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
-					for (int correctSubgraphCover : correctUseSubgraphCovers) {
-						if (correctUsesToCover.contains(correctSubgraphCover)) {
-							impureCases.add(correctSubgraphCover);
-							
-						}
-					}
-					isWeak &= !hasChanged;
-					
-					System.out.println("\timpure cases size after covering:" + impureCases.size());
-				} else {
-					// only cover correct, ignoring cases already covered by other features
-
-					System.out.println("\tcovering correct cases of size " + correctUseSubgraphCovers.size());
-					boolean hasChanged =correctUsesToCover.removeAll(correctUseSubgraphCovers);
-
-					// impureCases are the examples where, if the feature is admitted, we cannot distinguish their correctness from this feature
-					for (int misuseSubgraphCover : misuseSubgraphCovers) {
-						if (misusesToCover.contains(misuseSubgraphCover)) {
-							impureCases.add(misuseSubgraphCover);
-							
-						}
-					}
-					isWeak &= !hasChanged;
-					
-					System.out.println("\timpure cases size after covering:" + impureCases.size());
-				}
-			}
-			
-
+			System.out.println(featureId + " - CORK score now=" + corkScore);
 			if (isWeak) {
+				System.out.println("\t" + featureId + " is getting dropped");
 				weakSubgraphFeatures.add(featureId);
+				
+				for (Integer graph : subgraphCovers) {
+					graphsToFeaturesContained.get(graph).remove(featureId); // shouldn't matter, but let's remove anyway
+				}
 			}
 		}
 
