@@ -488,48 +488,7 @@ public class gSpan {
 
 			}
 
-			boolean isDebug = false;
-			for (Vertex debugnode : GRAPH_IS_MIN) {
-//				if (debugnode.label == 37) { // String:AES
-//					System.out.println("=====Found debug node: " + 37);
-//					System.out.println("\tCounts are:");
-//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-//					isDebug = true;
-//				}
-//				if (debugnode.label == 6) { // String:DES,6
-//					System.out.println("=====Found debug node: " + 6);
-//					System.out.println("\tCounts are:");
-//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-//					isDebug = true;
-//				}
-//				if (debugnode.label == 238) { // String:AES/ECB/NoPadding,238
-//					System.out.println("=====Found debug node: " + 238);
-//					System.out.println("\tCounts are:");
-//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-//					isDebug = true;
-//				}
-//
-//				if (debugnode.label == 7) { // Cipher.getInstance(),7
-//					System.out.println("=====Found debug node: " + 7);
-//					System.out.println("\tCounts are:");
-//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-//					isDebug = true;
-//				}
-			
-				if (debugnode.label == 206) { // interface_Enumeration,206
-					System.out.println("=====Found debug node: " + 206);
-					System.out.println("\tCounts are:");
-					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-					isDebug = true;
-				}
-				
-
-			}
+			boolean isDebug = detectGraphsForDebugging(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
 
 			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1,
 					currentBranchScore);
@@ -786,6 +745,53 @@ public class gSpan {
 				}
 			}
 		}
+	}
+
+	// used to check if the graph contains interesting stuff. More logs will be printed if so
+	private boolean detectGraphsForDebugging(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
+		boolean isDebug = false;
+		for (Vertex debugnode : GRAPH_IS_MIN) {
+//				if (debugnode.label == 37) { // String:AES
+//					System.out.println("=====Found debug node: " + 37);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+//				if (debugnode.label == 6) { // String:DES,6
+//					System.out.println("=====Found debug node: " + 6);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+//				if (debugnode.label == 238) { // String:AES/ECB/NoPadding,238
+//					System.out.println("=====Found debug node: " + 238);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+//
+//				if (debugnode.label == 7) { // Cipher.getInstance(),7
+//					System.out.println("=====Found debug node: " + 7);
+//					System.out.println("\tCounts are:");
+//					System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+//					System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+//					isDebug = true;
+//				}
+		
+			if (debugnode.label == 206) { // interface_Enumeration,206
+				System.out.println("=====Found debug node: " + 206);
+				System.out.println("\tCounts are:");
+				System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
+				System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
+				isDebug = true;
+			}
+			
+
+		}
+		return isDebug;
 	}
 
 	private double computeQualityTODetermineIfSignificant(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,

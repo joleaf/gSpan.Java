@@ -251,7 +251,8 @@ public class CountingUtils {
 			}
 		}
 
-		throw new RuntimeException("Impossible!");
+		System.out.println("WARN: features of minority class never reach significance. Please double-check the counts.");
+		return 1;
 	}
 
 	// actually we don't have to do this for all subgraphs.
