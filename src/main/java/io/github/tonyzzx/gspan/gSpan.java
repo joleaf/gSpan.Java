@@ -50,7 +50,7 @@ public class gSpan {
 	// HJ for counting coverage of dataset
 	public int totalMisuses = 0;
 	public int totalCorrectUses = 0;
-	int totalUnlabeled = 0;
+	public int totalUnlabeled = 0;
 	public int minimumToLabel;
 
 	// HJ: weights of the components
@@ -89,6 +89,7 @@ public class gSpan {
 																	// in U
 
 	public Map<Integer, Integer> graphsForSubgraphsNeedMoreEvidence = new HashMap<>();
+	public Set<Long> interestingSubgraphs = new HashSet<>();
 
 	private double theta = 0.0;
 
@@ -490,7 +491,7 @@ public class gSpan {
 
 			boolean isDebug = detectGraphsForDebugging(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
 
-			double q_s = computeQualityTODetermineIfSignificant(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1,
+			double q_s = computeQualityTODetermineIfSignificantAndAccept(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1,
 					currentBranchScore);
 
 			if (isDebug) {
@@ -506,6 +507,8 @@ public class gSpan {
 			if (A_S1 + B_S1 < 15 && U_S1 >= 0.1 * totalUnlabeled) {
 				frequentUnlabelledSubgraphs.add(ID);
 
+				interestingSubgraphs.add((long) ID);
+				
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
 					usefulGeneralUnlabelledGraphs.putIfAbsent(unlabeled, 0);
 					usefulGeneralUnlabelledGraphs.put(unlabeled, usefulGeneralUnlabelledGraphs.get(unlabeled) + 1);
@@ -517,7 +520,7 @@ public class gSpan {
 			// these subgraphs are significant and have high specificity, but we don't know
 			// about them yet.
 			// Thus, the user need to label more
-			LoggingUtils.logOnce("Boundary of specific-unlabelled: " + 0.01 * totalUnlabeled);
+			LoggingUtils.logOnce("Boundary of specific-unlabelled: " + 0.1 * totalUnlabeled);
 			if (A_S1 + B_S1 < 15 && U_S1 >= 5 && U_S1 < 0.1 * totalUnlabeled) { // 10%
 				frequentUnlabelledSubgraphs.add(ID);
 
@@ -525,6 +528,8 @@ public class gSpan {
 				if (isDebug) {
 					System.out.println("Request for more labels of debugged subgraph");
 				}
+				interestingSubgraphs.add((long) ID);
+				
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
 					if (selected > 9) {
 						break;
@@ -558,6 +563,7 @@ public class gSpan {
 						selected += 1;
 					}
 
+					interestingSubgraphs.add((long) ID);
 				}
 			}
 			
@@ -577,6 +583,8 @@ public class gSpan {
 			if (upperBound == UpperBoundReturnType.BAD_EXPLORE) {
 				// maybe getting more data can help?
 
+				interestingSubgraphs.add((long) ID);
+				
 				int selected = 0;
 				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
 					if (selected > minimumToLabel / 2) {
@@ -596,6 +604,7 @@ public class gSpan {
 				int selected = 0;
 				if (!alreadyRequestForMoreLabels.contains((long) subgraphIDNearBoundary)) {
 
+					interestingSubgraphs.add((long) subgraphIDNearBoundary);
 					for (Integer unlabeled : unlabeledCoverage.get((long) subgraphIDNearBoundary)) {
 						if (selected > minimumToLabel / 2) {
 							break;
@@ -620,7 +629,7 @@ public class gSpan {
 			// subgraphs output
 
 			if (upperBound == UpperBoundReturnType.BAD) {
-				System.out.println("\tPruning");
+//				System.out.println("\tPruning");
 //				coverage.remove(ID - 1);
 				return; // if we can do no better than the worst feature in the top-`numberOfFeatures`,
 						// prune the branch
@@ -794,7 +803,7 @@ public class gSpan {
 		return isDebug;
 	}
 
-	private double computeQualityTODetermineIfSignificant(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,
+	private double computeQualityTODetermineIfSignificantAndAccept(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,
 			int A_N, int B_N, double currentBranchScore) {
 
 		int originalSize = selectedSubgraphFeatures.size();
@@ -828,6 +837,18 @@ public class gSpan {
 
 			}
 		}
+		
+		// 4th filter
+		if (isRelevant) {
+			Graph g = new Graph(directed);
+			DFS_CODE.toGraph(g);
+			
+			if (g.allEdgesAreBoring()) {
+				isRelevant = false;
+				q_s = -2;
+			}
+		}
+
 
 		// 3nd filter
 		if (isRelevant) {
@@ -843,7 +864,8 @@ public class gSpan {
 				System.out.println("Reject due to similar score as subgraph");
 			}
 		}
-
+		
+		
 		if (isRelevant) {
 
 			// if adding the new feature will cause this to be bigger

@@ -7,6 +7,7 @@ import java.util.*;
 
 public class Graph extends ArrayList<Vertex> {
     private static final long serialVersionUID = 1L;
+	private static Set<Integer> boringEdges = new HashSet<>(Arrays.asList(1, 4, 7)); // "def" and "recv", "rep" 
     public int edge_size = 0;
     boolean directed = false;
     
@@ -148,6 +149,21 @@ public class Graph extends ArrayList<Vertex> {
         }
 
         os.flush();
+    }
+    
+    public boolean allEdgesAreBoring() {
+    	boolean result = true;
+    	for (int from = 0; from < size(); ++from) {
+
+            for (Edge it : this.get(from).edge) {
+          
+                if (!Graph.boringEdges.contains(it.eLabel)) {
+                	result = false;
+                }
+            
+            }
+        }
+    	return result;
     }
 
     public void check() {

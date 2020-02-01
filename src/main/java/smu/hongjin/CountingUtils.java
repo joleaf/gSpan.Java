@@ -183,43 +183,43 @@ public class CountingUtils {
 		}
 
 		if (bestPValue1 > 0.1 && bestPValue2 > 0.1) { // best case still bad
-			System.out.println("\tBest case still bad. Current p-value=" + currentPValue);
-			System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
-			System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
-			System.out.println("\t\tp values can become, at best, " + bestPValue1 + " or " + bestPValue2);
+//			System.out.println("\tBest case still bad. Current p-value=" + currentPValue);
+//			System.out.println("\t\t A_S0=" + A_S0 + " , A_S1=" + A_S1);
+//			System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
+//			System.out.println("\t\tp values can become, at best, " + bestPValue1 + " or " + bestPValue2);
 
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
 			// this is getting pruned, but we should see what graphs contain this subgraph
 			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
 //			if (currentPValue > 0.05 && currentPValue < 0.10) {
-				System.out.println("\tPruning but ask for more labels");
+//				System.out.println("\tPruning but ask for more labels");
 				return UpperBoundReturnType.BAD_EXPLORE;
 			} else {
 				return UpperBoundReturnType.BAD;
 			}
 		} else if (fuzzyEquals(Math.min(bestPValue1, bestPValue2), currentPValue, 0.0005)) {
-			System.out.println("\tCan't do better. Current p-value=" + currentPValue);
-			System.out.println("\t\tGiven A_S0=" + A_S0 + " , A_S1=" + A_S1);
-			System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
-			System.out.println("\tGiven that we cna't do better, pruning");
+//			System.out.println("\tCan't do better. Current p-value=" + currentPValue);
+//			System.out.println("\t\tGiven A_S0=" + A_S0 + " , A_S1=" + A_S1);
+//			System.out.println("\t\t" + "B_S0=" + B_S0 + " , B_S1=" + B_S1);
+//			System.out.println("\tGiven that we cna't do better, pruning");
 
 			// but maybe getting more data can help?
 			// especially for subgraphs that are indicative of the minority case
 			// this is getting pruned, but we should see what graphs contain this subgraph
 			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
 //			if (currentPValue > 0.05 && currentPValue < 0.10 ) {
-				System.out.println("\tPruning but ask for more labels");
+//				System.out.println("\tPruning but ask for more labels");
 				return UpperBoundReturnType.BAD_EXPLORE;
 			} else {
 				return UpperBoundReturnType.BAD;
 			}
 		} else {
 			if (BWeight * B_S1 >= AWeight * A_S1 && currentPValue > 0.05 && currentPValue < 0.10) {
-				System.out
-						.println("\tNot pruning, but should remember to ask for more labels. p-value=" + currentPValue);
-				System.out.println("\t\tRemmeber to ask for more: A_S0=" + A_S0 + " , A_S1=" + A_S1);
-				System.out.println("\t\tRemmeber to ask for more: B_S0=" + B_S0 + " , B_S1=" + B_S1);
+//				System.out
+//						.println("\tNot pruning, but should remember to ask for more labels. p-value=" + currentPValue);
+//				System.out.println("\t\tRemmeber to ask for more: A_S0=" + A_S0 + " , A_S1=" + A_S1);
+//				System.out.println("\t\tRemmeber to ask for more: B_S0=" + B_S0 + " , B_S1=" + B_S1);
 				return UpperBoundReturnType.GOOD_EXPLORE;
 			} else {
 				return UpperBoundReturnType.GOOD;

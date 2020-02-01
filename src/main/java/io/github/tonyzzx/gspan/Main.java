@@ -225,10 +225,10 @@ public class Main {
 				// giving us the intersection of
 				// 1. graphs that the current set of labels do not cover
 				// 2. graphs containing many motifs
-				if (top.size() <= 50 || entry.getValue() > top.get(50)) {
-					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
-					writingCount += 1;
-				}
+//				if (top.size() <= 50 || entry.getValue() > top.get(50)) {
+//					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
+//					writingCount += 1;
+//				}
 				if (writingCount > 50) {
 					break;
 				}
@@ -251,13 +251,13 @@ public class Main {
 				// giving us the intersection of
 				// 1. graphs that the current set of labels do not cover
 				// 2. graphs containing many motifs
-				if ((top.size() <= minimumToLabel || entry.getValue() > top.get(minimumToLabel))) {
-					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
-					writingCount += 1;
-				} else if (entry.getValue() < top.get(Math.max(0, top.size() - minimumToLabel))) {
-					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
-					writingCount += 1;
-				}
+//				if ((top.size() <= minimumToLabel || entry.getValue() > top.get(minimumToLabel))) {
+//					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
+//					writingCount += 1;
+//				} else if (entry.getValue() < top.get(Math.max(0, top.size() - minimumToLabel))) {
+//					unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
+//					writingCount += 1;
+//				}
 			}
 			System.out.println(
 					"\t\t\tWritten " + writingCount + " (accumulative count) for specific unlabelled subgraphs");
@@ -268,8 +268,9 @@ public class Main {
 //        					continue;
 //        				}
 //        				
-				unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
-				writingCount += 1;
+				
+//				unlabeledNeedsLabelsWriter.write(entry.getKey() + "\n");
+//				writingCount += 1;
 
 			}
 
@@ -284,8 +285,8 @@ public class Main {
 				if (needMoreEvidenceCount > 30) {
 					break;
 				}
-				unlabeledNeedsLabelsWriter.write(needMoreEvidenceGraph + "\n");
-				writingCount += 1;
+//				unlabeledNeedsLabelsWriter.write(needMoreEvidenceGraph + "\n");
+//				writingCount += 1;
 				needMoreEvidenceCount += 1;
 			}
 			System.out.println("\t\t\tWritten " + writingCount
@@ -303,10 +304,81 @@ public class Main {
 			System.out.println("\t\t\tWritten " + writingCount + " (accumulative count) for vanilla graphs");
 
 		}
+		
+		writeClingo(arguments, gSpan);
+
+		
 
 		System.out.println("The IDs of the uncovered methods have been written to " + arguments.outFilePath
 				+ "_interesting_unlabeled.txt");
 		System.out.println("The prefixes of the files we care about are " + arguments.outFilePath);
+	}
+
+	private static void writeClingo(Arguments arguments, gSpan gSpan) throws IOException {
+		System.out.println("writing clingo to " + arguments.outFilePath + "_interesting_subgraphs_coverage.txt");
+		try (BufferedWriter selectedSubGraphWriter = new BufferedWriter(
+				new FileWriter(arguments.outFilePath + "_interesting_subgraphs_coverage.txt"))) {
+			
+			selectedSubGraphWriter.write("#const n=" + gSpan.minimumToLabel + ".\n");
+			selectedSubGraphWriter.write("#const s=" + (gSpan.totalCorrectUses + gSpan.totalMisuses + gSpan.totalUnlabeled) / 200 + ".\n");
+			
+			Set<Integer> graphs = new HashSet<>();
+			
+			
+			for (Set<Integer> graphs1 : gSpan.unlabeledCoverage.values()) {
+				graphs.addAll(graphs1);
+			}
+			graphs.retainAll(gSpan.uncoveredUnlabeledGraphs);
+			
+			for (int graph : graphs) {
+				selectedSubGraphWriter.write("graph(" + graph + ")" + ".\n");
+			}
+			for (long subgraph: gSpan.unlabeledCoverage.keySet()) {
+				selectedSubGraphWriter.write("subgraph(" + subgraph + ")" + ".\n");
+			}
+			
+			Map<Long, Integer> countsOfSubgraphs = new HashMap<>();
+			for (long interestingSubgraph : gSpan.interestingSubgraphs ) {
+				if (gSpan.unlabeledCoverage.get(interestingSubgraph).size() < gSpan.minimumToLabel) {
+					continue;
+				}
+				countsOfSubgraphs.put(interestingSubgraph, gSpan.unlabeledCoverage.get(interestingSubgraph).size());			
+			}
+			List<Long> top = countsOfSubgraphs.entrySet().stream()
+				.sorted(Entry.comparingByValue(Comparator.reverseOrder()))
+//				.limit(countsOfSubgraphs.entrySet().size() / 2) 	// 
+				.map(entry -> entry.getKey())
+				.collect(Collectors.toList());
+			
+			
+			for (long interestingSubgraph : top) {
+				
+				for (int graph : gSpan.unlabeledCoverage.get(interestingSubgraph)) {
+					if (graphs.contains(graph )) {
+						selectedSubGraphWriter.write("covers(" + graph + "," + interestingSubgraph + ")" + ".\n");
+					}
+				}
+				
+			}
+			
+			selectedSubGraphWriter.write("{ selected(G) : graph(G) } <= 1 :- graph(G).\n");
+
+
+			selectedSubGraphWriter.write("sufficiently_covered(SG) :- #count { G : selected(G), covers(G, SG), graph(G) } >= n, subgraph(SG).\n");
+
+			selectedSubGraphWriter.write(":- { selected(G)} > s .\n");
+
+			selectedSubGraphWriter.write("covered_count(X) :- X = #count {SG : sufficiently_covered(SG), subgraph(SG)}.\n");
+			selectedSubGraphWriter.write("num_selected(Y) :- Y =  #count{G : selected(G)}.\n");
+
+			selectedSubGraphWriter.write("#minimize {Y@1 : num_selected(Y)}.\n");
+			selectedSubGraphWriter.write("#maximize {X@2 : covered_count(X) }.\n");
+
+			selectedSubGraphWriter.write("#show selected/1.\n");
+			selectedSubGraphWriter.write("#show covered_count/1.\n");
+			selectedSubGraphWriter.write("#show num_selected/1.\n");
+			
+		}
 	}
 
 	private static class Arguments {
