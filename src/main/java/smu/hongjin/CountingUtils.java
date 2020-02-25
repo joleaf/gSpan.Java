@@ -48,24 +48,22 @@ public class CountingUtils {
 //	}
 
 	public static double initialFeatureScore(int A_S0, int A_S1, int B_S0, int B_S1, int U_S0, int U_S1, int A_N,
-			int B_N, double AWeight, double BWeight, double UWeight, long ID) {
+			int B_N, double AWeight, double BWeight,  long ID) {
 
 		System.out.println("\t==getting score==");
-		System.out.print("\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
+//		System.out.print("\tfirst component=" + Math.abs(AWeight * A_S1 - BWeight * B_S1));
 
 		double expectedRatio = AWeight / (AWeight + BWeight);
 		LoggingUtils.logOnce("\t\t\t, expectedRatio=" + expectedRatio);
-		System.out.println(
-				"\t\t, second component=" + Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1));
 
 		double score = Math.abs(AWeight * A_S1 - BWeight * B_S1) // difference bet. percentages [0..100]
 //				- Math.abs(gSpan.skewnessImportance * expectedRatio - UWeight * U_S1) // [0..skewnessImportance/2]
 		;
-		if (Math.abs(AWeight * A_S1 - BWeight * B_S1) > 0 && score <= 0) {
-			gSpan.wouldNotBePrunedWithoutSemiSupervisedFilters += 1;
-			System.out.println("\t\t" + ID + " would be accepted if not for the distribution penalty!");
-			System.out.println("\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
-		}
+//		if (Math.abs(AWeight * A_S1 - BWeight * B_S1) > 0 && score <= 0) {
+//			gSpan.wouldNotBePrunedWithoutSemiSupervisedFilters += 1;
+//			System.out.println("\t\t" + ID + " would be accepted if not for the distribution penalty!");
+//			System.out.println("\t\tA_S1=" + A_S1 + ",B_S1=" + B_S1);
+//		}
 
 //		long[][] currentCounts = { { A_S1, A_S0 }, { B_S1, B_S0 } };
 //		ChiSquareTest test = new ChiSquareTest();
@@ -159,7 +157,7 @@ public class CountingUtils {
 	}
 
 	public static UpperBoundReturnType upperBound(double current, int A_S0, int A_S1, int B_S0, int B_S1, int U_S0,
-			int U_S1, double AWeight, double BWeight, double UWeight, boolean isDebug) {
+			int U_S1, double AWeight, double BWeight, boolean isDebug) {
 
 		if (A_S1 == 0 && B_S1 == 0) {
 			return UpperBoundReturnType.BAD;
@@ -242,7 +240,7 @@ public class CountingUtils {
 		int majorityCount = classACounts > classBCounts ? classACounts : classBCounts;
 		int minorityCount = classACounts > classBCounts ? classBCounts : classACounts;
 
-		for (int i = 0; i < minorityCount; i++) {
+		for (int i = 3; i < minorityCount; i++) {
 			long[][] currentCounts = { { 0, majorityCount }, { i, minorityCount - i } };
 			double currentPValue = test.chiSquareTest(currentCounts);
 			if (currentPValue < 0.05) {
@@ -252,7 +250,7 @@ public class CountingUtils {
 		}
 
 		System.out.println("WARN: features of minority class never reach significance. Please double-check the counts.");
-		return 1;
+		return 3;
 	}
 
 	// actually we don't have to do this for all subgraphs.

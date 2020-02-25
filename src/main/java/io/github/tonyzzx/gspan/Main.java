@@ -2,7 +2,9 @@ package io.github.tonyzzx.gspan;
 
 import org.apache.commons.cli.*;
 
+import io.github.tonyzzx.gspan.model.Graph;
 import smu.hongjin.CountingUtils;
+import smu.hongjin.ExcludeBoringNodes;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -30,6 +32,13 @@ public class Main {
 		System.out.println("args: " + Arrays.toString(args));
 
 		File inFile = new File(arguments.inFilePath);
+		
+		//
+		ExcludeBoringNodes.pathToVertMap = arguments.boringNodePath;
+		Graph.boringNodes = ExcludeBoringNodes.IdsOfBoringNodes();
+		//
+		
+		
 		File outFile = new File(arguments.outFilePath);
 		try (FileReader reader = new FileReader(inFile)) {
 			try (FileWriter writer = new FileWriter(outFile)) {
@@ -48,9 +57,6 @@ public class Main {
 	private static void postprocess(Arguments arguments, gSpan gSpan) throws IOException {
 		
 		List<Integer> graphs = new ArrayList<>();
-//		for (Entry<Long, Set<Integer>> entry : gSpan.coverage.entrySet()) {
-//			graphs.addAll(entry.getValue());
-//		}
 		graphs.addAll(gSpan.correctUses);
 		graphs.addAll(gSpan.misuses);
 		
@@ -59,8 +65,6 @@ public class Main {
 		for (int graph : graphs) {
 			graphsToFeaturesContained.putIfAbsent(graph, new HashSet<>());
 		}
-		
-		System.out.println("graphs sz " + graphs.size()); // graphs are different!!
 
 		Map<Long, Double> sortedSubgraphFeatures = gSpan.selectedSubgraphFeatures.entrySet().stream()
 				.sorted(Entry.comparingByValue(Comparator.reverseOrder()))
@@ -68,11 +72,11 @@ public class Main {
 				.collect(Collectors.toMap(Entry::getKey, Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
 
-
-		
 		Set<Long> weakSubgraphFeatures = new HashSet<>();
 		
-		int previousCorkScore = Integer.MAX_VALUE;
+		// the worst CORK value is when all the misuses and correct uses cannot be disambiguated.
+		int previousCorkScore = gSpan.totalCorrectUses * gSpan.totalMisuses;// Integer.MAX_VALUE;
+		System.out.println("worst score : " + previousCorkScore);
 		for (Map.Entry<Long, Double> entry : sortedSubgraphFeatures.entrySet()) {
 			Long featureId = entry.getKey();
 
@@ -113,12 +117,12 @@ public class Main {
 			}
 			
 			boolean isWeak = true;
-			if (corkScore < previousCorkScore) {
+			if (corkScore < previousCorkScore - 1) {
 				isWeak = false;
 			}
 			previousCorkScore = corkScore;
 
-			System.out.println(featureId + " - CORK score now=" + corkScore);
+			System.out.println("feature " + featureId + " - CORK score now=" + corkScore);
 			if (isWeak) {
 				System.out.println("\t" + featureId + " is getting dropped");
 				weakSubgraphFeatures.add(featureId);
@@ -211,9 +215,9 @@ public class Main {
 					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item)).sorted(Collections.reverseOrder())
 					.collect(Collectors.toList());
 
-			System.out.println("\t" + "hits on U - usefulGeneralUnlabelledGraphs");
-			System.out.println("\t" + "# usefulGeneralUnlabelledGraphs: " + gSpan.usefulGeneralUnlabelledGraphs.size());
-			System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 50)));
+//			System.out.println("\t" + "hits on U - usefulGeneralUnlabelledGraphs");
+//			System.out.println("\t" + "# usefulGeneralUnlabelledGraphs: " + gSpan.usefulGeneralUnlabelledGraphs.size());
+//			System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 50)));
 
 			int writingCount = 0;
 			for (Entry<Integer, Integer> entry : gSpan.usefulGeneralUnlabelledGraphs.entrySet()) {
@@ -238,10 +242,10 @@ public class Main {
 			top = gSpan.usefulSpecificUnlabelledGraphs.values().stream()
 //        					.filter(item -> !gSpan.uncoveredUnlabeledGraphs.contains(item))
 					.sorted(Collections.reverseOrder()).collect(Collectors.toList());
-			System.out.println("\thits on U - usefulSpecificUnlabelledGraphs");
-			System.out
-					.println("\t" + "# usefulSpecificUnlabelledGraphs: " + gSpan.usefulSpecificUnlabelledGraphs.size());
-			System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 100)));
+//			System.out.println("\thits on U - usefulSpecificUnlabelledGraphs");
+//			System.out
+//					.println("\t" + "# usefulSpecificUnlabelledGraphs: " + gSpan.usefulSpecificUnlabelledGraphs.size());
+//			System.out.println("\t\t" + top.subList(0, Math.min(top.size(), 100)));
 			for (Entry<Integer, Integer> entry : gSpan.usefulSpecificUnlabelledGraphs.entrySet()) {
 				Integer graphId = entry.getKey();
 //        				if (!gSpan.uncoveredUnlabeledGraphs.contains(graphId)) {
@@ -333,16 +337,31 @@ public class Main {
 			for (int graph : graphs) {
 				selectedSubGraphWriter.write("graph(" + graph + ")" + ".\n");
 			}
-			for (long subgraph: gSpan.unlabeledCoverage.keySet()) {
-				selectedSubGraphWriter.write("subgraph(" + subgraph + ")" + ".\n");
-			}
+		
 			
-			Map<Long, Integer> countsOfSubgraphs = new HashMap<>();
+			boolean pruneMore = gSpan.interestingSubgraphs.size() > 50000;
+			
+			Map<Long, Long> countsOfSubgraphs = new HashMap<>();
 			for (long interestingSubgraph : gSpan.interestingSubgraphs ) {
-				if (gSpan.unlabeledCoverage.get(interestingSubgraph).size() < gSpan.minimumToLabel) {
+				
+				long size = gSpan.unlabeledCoverage.get(interestingSubgraph)
+						.stream()
+						.filter(graph -> graphs.contains(graph))
+						.count();
+				if (size < gSpan.minimumToLabel) {
 					continue;
 				}
-				countsOfSubgraphs.put(interestingSubgraph, gSpan.unlabeledCoverage.get(interestingSubgraph).size());			
+				// if too many subgraphs, we prune more subgraphs..
+				if (pruneMore && size < gSpan.minimumToLabel * 3) {
+					continue;
+				}
+				countsOfSubgraphs.put(interestingSubgraph, size);			
+			}
+			for (long subgraph: gSpan.unlabeledCoverage.keySet()) {
+				if (!countsOfSubgraphs.containsKey(subgraph)) {
+					continue;
+				}
+				selectedSubGraphWriter.write("subgraph(" + subgraph + ")" + ".\n");
 			}
 			List<Long> top = countsOfSubgraphs.entrySet().stream()
 				.sorted(Entry.comparingByValue(Comparator.reverseOrder()))
@@ -352,7 +371,6 @@ public class Main {
 			
 			
 			for (long interestingSubgraph : top) {
-				
 				for (int graph : gSpan.unlabeledCoverage.get(interestingSubgraph)) {
 					if (graphs.contains(graph )) {
 						selectedSubGraphWriter.write("covers(" + graph + "," + interestingSubgraph + ")" + ".\n");
@@ -369,14 +387,14 @@ public class Main {
 			selectedSubGraphWriter.write(":- { selected(G)} > s .\n");
 
 			selectedSubGraphWriter.write("covered_count(X) :- X = #count {SG : sufficiently_covered(SG), subgraph(SG)}.\n");
-			selectedSubGraphWriter.write("num_selected(Y) :- Y =  #count{G : selected(G)}.\n");
+//			selectedSubGraphWriter.write("num_selected(Y) :- Y =  #count{G : selected(G)}.\n");
 
-			selectedSubGraphWriter.write("#minimize {Y@1 : num_selected(Y)}.\n");
-			selectedSubGraphWriter.write("#maximize {X@2 : covered_count(X) }.\n");
+//			selectedSubGraphWriter.write("#minimize {Y@1 : num_selected(Y)}.\n");
+			selectedSubGraphWriter.write("#maximize {X : covered_count(X) }.\n");
 
 			selectedSubGraphWriter.write("#show selected/1.\n");
 			selectedSubGraphWriter.write("#show covered_count/1.\n");
-			selectedSubGraphWriter.write("#show num_selected/1.\n");
+//			selectedSubGraphWriter.write("#show num_selected/1.\n");
 			
 		}
 	}
@@ -387,6 +405,9 @@ public class Main {
 		private String[] args;
 
 		String inFilePath;
+		
+		String boringNodePath;
+		
 		long minSup;
 		long minNodeNum = 0;
 		long maxNodeNum = Long.MAX_VALUE;
@@ -413,6 +434,7 @@ public class Main {
 			Options options = new Options();
 			options.addRequiredOption("d", "data", true, "(Required) File path of data set");
 			options.addRequiredOption("s", "sup", true, "(Required) Minimum support");
+			options.addOption("b", "boring", true, "Boring Nodes path");
 			options.addOption("i", "min-node", true, "Minimum number of nodes for each sub-graph");
 			options.addOption("a", "max-node", true, "Maximum number of nodes for each sub-graph");
 			options.addOption("r", "result", true, "File path of result");
@@ -433,6 +455,7 @@ public class Main {
 			}
 
 			inFilePath = cmd.getOptionValue("d");
+			boringNodePath = cmd.getOptionValue("b");
 			minSup = Long.parseLong(cmd.getOptionValue("s"));
 			minNodeNum = Long.parseLong(cmd.getOptionValue("i", "0"));
 			maxNodeNum = Long.parseLong(cmd.getOptionValue("a", String.valueOf(Long.MAX_VALUE)));
