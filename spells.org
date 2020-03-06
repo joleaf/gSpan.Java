@@ -1,0 +1,2 @@
+* Example spell
+** java -Xmx64G -jar GSpanMiner.jar -d java.lang.String__charAt__1_formatted.txt -b java.lang.String__charAt__1_vertmap.txt -s 3 -a 6 &>  String__charAt.log
