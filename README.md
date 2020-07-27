@@ -6,6 +6,10 @@ This is a Java implementation of frequent sub-graph mining algorithm gSpan. Most
 
 HJ:
 use eclipse to export the runnable jar
+Here's an example of what I ran:
+
+** java -Xmx64G -jar GSpanMiner.jar -d java.lang.String__charAt__1_formatted.txt -b java.lang.String__charAt__1_vertmap.txt -s 3 -a 6 &>  String__charAt.log
+
 
 ## Documentation
 
