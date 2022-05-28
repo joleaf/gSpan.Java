@@ -82,16 +82,9 @@ public class gSpan {
 	public Set<Integer> correctUses = new HashSet<>();
 	public Map<Integer, Integer> quantities = new HashMap<>();
 
-	// Use these data structures to determine which examples we need more labels of
+	// to determine which examples we need labels of
 	public Set<Integer> uncoveredUnlabeledGraphs = new HashSet<>();
-	public Set<Integer> uncoveredLabeledGraphs = new HashSet<>();
-	public Map<Integer, Integer> usefulGeneralUnlabelledGraphs = new HashMap<>();
-	public Map<Integer, Integer> usefulSpecificUnlabelledGraphs = new HashMap<>();
-	public Map<Integer, Integer> subgraphForDoubleCheckingUnlabelledGraphs = new HashMap<>();
-	public Set<Long> frequentUnlabelledSubgraphs = new HashSet<>(); // subgraphs infrequent in labeled set, but frequent
-																	// in U
 
-	public Map<Integer, Integer> graphsForSubgraphsNeedMoreEvidence = new HashMap<>();
 	public Set<Long> interestingSubgraphs = new HashSet<>();
 
 	private double theta = 0.0;
@@ -108,7 +101,6 @@ public class gSpan {
 	public Set<Long> alreadyRequestForMoreLabels = new HashSet<>();
 
 
-	public List<Integer> forDebugging = Arrays.asList(206);
 	
 	public gSpan() {
 		TRANS = new ArrayList<>();
@@ -278,7 +270,7 @@ public class gSpan {
 				gyCounts.put(n, counts.get(n));
 
 			
-			reportSingle(g, gyCounts, forDebugging.contains(it.getKey()));
+			reportSingle(g, gyCounts, false); // forDebugging.contains(it.getKey()));
 		}
 
 		ArrayList<Edge> edges = new ArrayList<>();
@@ -497,7 +489,7 @@ public class gSpan {
 
 			}
 
-			boolean isDebug = detectGraphsForDebugging(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
+			boolean isDebug = false; // detectGraphsForDebugging(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1);
 
 			double q_s = computeQualityTODetermineIfSignificantAndAccept(A_S0, B_S0, U_S0, A_S1, B_S1, U_S1, -1, -1,
 					currentBranchScore, DFS_CODE.size() + 1, null);
@@ -513,14 +505,10 @@ public class gSpan {
 			// the user need to label more
 			LoggingUtils.logOnce("Boundary of general-unlabelled: ");
 			if (A_S1 + B_S1 < 15 && U_S1 >= 0.1 * totalUnlabeled) {
-				frequentUnlabelledSubgraphs.add(ID);
 
 				interestingSubgraphs.add((long) ID);
 				
-				for (Integer unlabeled : unlabeledCoverage.get(ID)) {
-					usefulGeneralUnlabelledGraphs.putIfAbsent(unlabeled, 0);
-					usefulGeneralUnlabelledGraphs.put(unlabeled, usefulGeneralUnlabelledGraphs.get(unlabeled) + 1);
-				}
+				
 			}
 
 			// low frequency in labeled graphs, but appears just sufficient in U: might be
@@ -530,7 +518,6 @@ public class gSpan {
 			// Thus, the user need to label more
 			LoggingUtils.logOnce("Boundary of specific-unlabelled: " + 0.1 * totalUnlabeled);
 			if (A_S1 + B_S1 < 15 && U_S1 >= 5 && U_S1 < 0.1 * totalUnlabeled) { // 10%
-				frequentUnlabelledSubgraphs.add(ID);
 
 				int selected = 0;
 				if (isDebug) {
@@ -543,8 +530,6 @@ public class gSpan {
 						break;
 					}
 
-					usefulSpecificUnlabelledGraphs.putIfAbsent(unlabeled, 0);
-					usefulSpecificUnlabelledGraphs.put(unlabeled, usefulSpecificUnlabelledGraphs.get(unlabeled) + 1);
 
 					selected += 1;
 				}
@@ -564,9 +549,6 @@ public class gSpan {
 							break;
 						}
 
-						subgraphForDoubleCheckingUnlabelledGraphs.putIfAbsent(unlabeled, 0);
-						subgraphForDoubleCheckingUnlabelledGraphs.put(unlabeled,
-								subgraphForDoubleCheckingUnlabelledGraphs.get(unlabeled) + 1);
 
 						selected += 1;
 					}
@@ -599,9 +581,6 @@ public class gSpan {
 						break;
 					}
 
-					graphsForSubgraphsNeedMoreEvidence.putIfAbsent(unlabeled, 0);
-					graphsForSubgraphsNeedMoreEvidence.put(unlabeled,
-							graphsForSubgraphsNeedMoreEvidence.get(unlabeled) + 1);
 
 					selected += 1;
 				}
@@ -617,10 +596,6 @@ public class gSpan {
 						if (selected > minimumToLabel / 2) {
 							break;
 						}
-						System.out.println("\trequest more labels for:" + subgraphIDNearBoundary);
-						graphsForSubgraphsNeedMoreEvidence.putIfAbsent(unlabeled, 0);
-						graphsForSubgraphsNeedMoreEvidence.put(unlabeled,
-								graphsForSubgraphsNeedMoreEvidence.get(unlabeled) + 1);
 
 						selected += 1;
 					}
@@ -763,23 +738,7 @@ public class gSpan {
 		}
 	}
 
-	// used to check if the graph contains interesting stuff. More logs will be printed if so
-	private boolean detectGraphsForDebugging(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1) {
-		boolean isDebug = false;
-		for (Vertex debugnode : GRAPH_IS_MIN) {
-		
-			if (forDebugging.contains(debugnode.label)) { 
-				System.out.println("=====Found debug node ");
-				System.out.println("\tCounts are:");
-				System.out.println("\t" + A_S0 + "," + B_S0 + "," + U_S0 + "," + A_S1 + "," + B_S1 + "," + U_S1);
-				System.out.println("\t\t Proportion: " + ((float) U_S1 / (U_S0 + U_S1)));
-				isDebug = true;
-			}
-			
 
-		}
-		return isDebug;
-	}
 
 	private double computeQualityTODetermineIfSignificantAndAccept(int A_S0, int B_S0, int U_S0, int A_S1, int B_S1, int U_S1,
 			int A_N, int B_N, double currentBranchScore, int numNodes, Graph singleVertexG) {
